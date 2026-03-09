@@ -9,9 +9,15 @@ Bu servis sadece cihaz kaydi, heartbeat ve blok/unblock icin vardir.
 ```env
 REGISTRY_PORT=3010
 REGISTRY_ADMIN_TOKEN=super-secret-admin-token
-REGISTRY_TELEGRAM_BOT_TOKEN=your-bot-token
+REGISTRY_TELEGRAM_BOT_TOKEN=your-dedicated-registry-bot-token
 REGISTRY_TELEGRAM_DEV_ID=your-telegram-chat-id
 ```
+
+Not:
+
+- `REGISTRY_TELEGRAM_BOT_TOKEN` tanimliysa registry Telegram komutlari icin polling yapar.
+- Sadece `TELEGRAM_BOT_TOKEN` tanimliysa registry bildirim gonderebilir, ama komut polling acilmaz.
+- Bu sayede backend ile registry ayni bot token uzerinden `getUpdates` cakismaz.
 
 ## 2. Local calistirma
 

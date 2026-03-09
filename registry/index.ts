@@ -16,7 +16,8 @@ initRegistryDb();
 
 const PORT = Number(process.env.REGISTRY_PORT || 3010);
 const ADMIN_TOKEN = String(process.env.REGISTRY_ADMIN_TOKEN || '').trim();
-const BOT_TOKEN = String(process.env.REGISTRY_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '').trim();
+const TELEGRAM_SEND_TOKEN = String(process.env.REGISTRY_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '').trim();
+const TELEGRAM_POLL_TOKEN = String(process.env.REGISTRY_TELEGRAM_BOT_TOKEN || '').trim();
 const DEV_CHAT_ID = String(process.env.REGISTRY_TELEGRAM_DEV_ID || process.env.TELEGRAM_DEV_ID || '').trim();
 const publicDir = path.resolve(__dirname, 'public');
 const downloadsDir = path.join(publicDir, 'downloads');
@@ -312,9 +313,9 @@ function requireAdmin(req: express.Request, res: express.Response, next: express
 }
 
 async function sendTelegram(text: string) {
-    if (!BOT_TOKEN || !DEV_CHAT_ID) return;
+    if (!TELEGRAM_SEND_TOKEN || !DEV_CHAT_ID) return;
     try {
-        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        await axios.post(`https://api.telegram.org/bot${TELEGRAM_SEND_TOKEN}/sendMessage`, {
             chat_id: DEV_CHAT_ID,
             text,
             parse_mode: 'HTML',
@@ -326,9 +327,9 @@ async function sendTelegram(text: string) {
 }
 
 async function getTelegramUpdates() {
-    if (!BOT_TOKEN) return [];
+    if (!TELEGRAM_POLL_TOKEN) return [];
     try {
-        const url = `https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${lastTelegramUpdateId + 1}&timeout=25`;
+        const url = `https://api.telegram.org/bot${TELEGRAM_POLL_TOKEN}/getUpdates?offset=${lastTelegramUpdateId + 1}&timeout=25`;
         const response = await axios.get(url);
         return response.data.result || [];
     } catch (error: any) {
@@ -399,7 +400,12 @@ async function handleTelegramCommand(text: string, fromId: string) {
 }
 
 function startTelegramPolling() {
-    if (!BOT_TOKEN || !DEV_CHAT_ID) return;
+    if (!TELEGRAM_POLL_TOKEN || !DEV_CHAT_ID) {
+        if (TELEGRAM_SEND_TOKEN && DEV_CHAT_ID && !TELEGRAM_POLL_TOKEN) {
+            console.log('Registry telegram polling disabled: set REGISTRY_TELEGRAM_BOT_TOKEN to enable Telegram commands.');
+        }
+        return;
+    }
 
     (async () => {
         while (true) {
