@@ -160,8 +160,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         await window.trackifyDesktop.copyText(state.desktopDevice.device_id);
     });
 
-    $('open-registry').addEventListener('click', () => window.trackifyDesktop.openRegistryWindow());
-    $('open-registry-external').addEventListener('click', () => window.trackifyDesktop.openRegistryExternal());
     $('open-local-api').addEventListener('click', () => window.trackifyDesktop.openExternal('http://127.0.0.1:3001/health'));
     $('launch-at-startup').addEventListener('change', async (event) => {
         await window.trackifyDesktop.setLaunchAtStartup(event.target.checked);
@@ -169,14 +167,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     $('start-services').addEventListener('click', async () => {
         await window.trackifyDesktop.startServices();
-        await refreshState();
-    });
-    $('stop-services').addEventListener('click', async () => {
-        await window.trackifyDesktop.stopServices();
-        await refreshState();
-    });
-    $('restart-services').addEventListener('click', async () => {
-        await window.trackifyDesktop.restartServices();
         await refreshState();
     });
     $('check-extension-update').addEventListener('click', async () => {
@@ -193,7 +183,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('open-downloaded-extension').addEventListener('click', async () => {
         await window.trackifyDesktop.openDownloadedExtension();
     });
-    $('open-chrome-extensions').addEventListener('click', () => window.trackifyDesktop.openExternal('chrome://extensions'));
+    $('open-chrome-extensions').addEventListener('click', () => window.trackifyDesktop.openChromeExtensions());
     $('dismiss-install-guide').addEventListener('click', async () => {
         await window.trackifyDesktop.dismissInstallGuide();
         await refreshState();
@@ -203,7 +193,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         await refreshState();
     });
     $('quit-app').addEventListener('click', () => window.trackifyDesktop.quit());
-    $('onboarding-open-registry').addEventListener('click', () => window.trackifyDesktop.openRegistryWindow());
     $('onboarding-launch-checkbox').addEventListener('change', async (event) => {
         await window.trackifyDesktop.setLaunchAtStartup(event.target.checked);
         await refreshState();

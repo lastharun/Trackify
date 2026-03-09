@@ -62,17 +62,9 @@
     "files": [
       "desktop/**/*",
       "extension/icon.png",
-      "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "dist",
-        "to": "dist"
-      },
-      {
-        "from": "database/schema.sql",
-        "to": "database/schema.sql"
-      }
+      "package.json",
+      "dist/**/*",
+      "database/schema.sql"
     ],
     "mac": {
       "category": "public.app-category.utilities",

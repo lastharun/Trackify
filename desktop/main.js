@@ -93,10 +93,39 @@ function getRuntimeDataDir() {
     return dir;
 }
 
+function getAppRuntimeRoot() {
+    return app.isPackaged ? app.getAppPath() : rootDir;
+}
+
 function getRuntimeSchemaPath() {
-    return app.isPackaged
-        ? path.join(process.resourcesPath, 'database', 'schema.sql')
-        : path.join(rootDir, 'database', 'schema.sql');
+    return path.join(getAppRuntimeRoot(), 'database', 'schema.sql');
+}
+
+function getServiceEntryPath(service) {
+    return path.join(getAppRuntimeRoot(), 'dist', service, 'index.js');
+}
+
+function openChromeExtensionsPage() {
+    const targetUrl = 'chrome://extensions/';
+    if (process.platform === 'win32') {
+        const candidates = [
+            path.join(process.env['PROGRAMFILES'] || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+            path.join(process.env['PROGRAMFILES(X86)'] || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+            path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'Application', 'chrome.exe')
+        ].filter(Boolean);
+
+        for (const executable of candidates) {
+            if (!fs.existsSync(executable)) continue;
+            spawn(executable, [targetUrl], { detached: true, stdio: 'ignore' }).unref();
+            return true;
+        }
+
+        spawn('cmd.exe', ['/c', 'start', '', 'chrome', targetUrl], { detached: true, stdio: 'ignore' }).unref();
+        return true;
+    }
+
+    shell.openExternal(targetUrl);
+    return true;
 }
 
 function getDesktopPrefsFile() {
@@ -384,12 +413,12 @@ async function startBackendProcess() {
     };
     const command = app.isPackaged ? process.execPath : process.execPath;
     const args = app.isPackaged
-        ? [path.join(process.resourcesPath, 'dist', 'backend', 'index.js')]
+        ? [getServiceEntryPath('backend')]
         : ['--import', 'tsx', path.join(rootDir, 'backend/index.ts')];
     if (app.isPackaged) runtimeEnv.ELECTRON_RUN_AS_NODE = '1';
 
     backendProcess = spawn(command, args, {
-        cwd: app.isPackaged ? process.resourcesPath : rootDir,
+        cwd: getAppRuntimeRoot(),
         env: runtimeEnv,
         stdio: ['ignore', 'pipe', 'pipe']
     });
@@ -407,12 +436,12 @@ async function startWorkerProcess() {
     };
     const command = app.isPackaged ? process.execPath : process.execPath;
     const args = app.isPackaged
-        ? [path.join(process.resourcesPath, 'dist', 'workers', 'index.js')]
+        ? [getServiceEntryPath('workers')]
         : ['--import', 'tsx', path.join(rootDir, 'workers/index.ts')];
     if (app.isPackaged) runtimeEnv.ELECTRON_RUN_AS_NODE = '1';
 
     workerProcess = spawn(command, args, {
-        cwd: app.isPackaged ? process.resourcesPath : rootDir,
+        cwd: getAppRuntimeRoot(),
         env: runtimeEnv,
         stdio: ['ignore', 'pipe', 'pipe']
     });
@@ -493,10 +522,7 @@ function createTray() {
     tray.setToolTip('Trackify Control Center');
     tray.setContextMenu(Menu.buildFromTemplate([
         { label: 'Masaustu Panelini Ac', click: () => mainWindow?.show() },
-        { label: 'Registry Panel URL', click: () => shell.openExternal(PANEL_URL) },
-        { type: 'separator' },
         { label: 'Servisleri Baslat', click: () => startManagedServices() },
-        { label: 'Servisleri Durdur', click: () => stopManagedServices() },
         { type: 'separator' },
         {
             label: 'Cikis', click: () => {
@@ -555,14 +581,6 @@ ipcMain.handle('desktop:start-services', async () => {
     await startManagedServices();
     return collectState();
 });
-ipcMain.handle('desktop:stop-services', async () => {
-    await stopManagedServices();
-    return collectState();
-});
-ipcMain.handle('desktop:restart-services', async () => {
-    await restartManagedServices();
-    return collectState();
-});
 ipcMain.handle('desktop:check-extension-update', async () => {
     await checkExtensionUpdate();
     return collectState();
@@ -596,16 +614,7 @@ ipcMain.handle('desktop:clear-logs', async () => {
     logs = [];
     return collectState();
 });
-ipcMain.handle('desktop:open-registry-window', async () => {
-    const win = new BrowserWindow({
-        width: 1420,
-        height: 920,
-        backgroundColor: '#0b1020',
-        autoHideMenuBar: true
-    });
-    await win.loadURL(PANEL_URL);
-});
-ipcMain.handle('desktop:open-registry-external', async () => shell.openExternal(PANEL_URL));
+ipcMain.handle('desktop:open-chrome-extensions', async () => openChromeExtensionsPage());
 ipcMain.handle('desktop:quit', async () => {
     isQuitting = true;
     await stopManagedServices();

@@ -2,11 +2,7 @@ const { contextBridge, ipcRenderer, shell, clipboard } = require('electron');
 
 contextBridge.exposeInMainWorld('trackifyDesktop', {
     openExternal: (url) => shell.openExternal(url),
-    openRegistryExternal: () => ipcRenderer.invoke('desktop:open-registry-external'),
-    openRegistryWindow: () => ipcRenderer.invoke('desktop:open-registry-window'),
     startServices: () => ipcRenderer.invoke('desktop:start-services'),
-    stopServices: () => ipcRenderer.invoke('desktop:stop-services'),
-    restartServices: () => ipcRenderer.invoke('desktop:restart-services'),
     checkExtensionUpdate: () => ipcRenderer.invoke('desktop:check-extension-update'),
     downloadExtensionUpdate: () => ipcRenderer.invoke('desktop:download-extension-update'),
     openDownloadsFolder: () => ipcRenderer.invoke('desktop:open-downloads-folder'),
@@ -14,6 +10,7 @@ contextBridge.exposeInMainWorld('trackifyDesktop', {
     completeOnboarding: () => ipcRenderer.invoke('desktop:complete-onboarding'),
     dismissInstallGuide: () => ipcRenderer.invoke('desktop:dismiss-install-guide'),
     openDownloadedExtension: () => ipcRenderer.invoke('desktop:open-downloaded-extension'),
+    openChromeExtensions: () => ipcRenderer.invoke('desktop:open-chrome-extensions'),
     clearLogs: () => ipcRenderer.invoke('desktop:clear-logs'),
     getState: () => ipcRenderer.invoke('desktop:get-state'),
     quit: () => ipcRenderer.invoke('desktop:quit'),
