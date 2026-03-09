@@ -2,6 +2,7 @@ const API = 'http://localhost:3001/api';
 let products = [];
 let filterState = { tag: 'all', search: '', domainTag: null };
 let selectedIds = new Set();
+let countdownTimer = null;
 
 const nativeFetch = window.fetch.bind(window);
 window.fetch = async (input, init = {}) => {
@@ -34,6 +35,13 @@ function parseSelectorList(value) {
     }
 
     return raw.split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
+}
+
+function getTrackedSelectors(product) {
+    return [
+        String(product?.selector_price || '').trim(),
+        ...parseSelectorList(product?.selector_secondary)
+    ].filter(Boolean);
 }
 
 function renderBlockedOverlay(state) {
@@ -168,6 +176,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('product-list').addEventListener('click', handleCardClick);
     document.getElementById('product-list').addEventListener('change', handleCardChange);
     document.getElementById('product-list').addEventListener('input', handleCardInput);
+
+    if (!countdownTimer) {
+        countdownTimer = setInterval(updateNextCheckCountdowns, 1000);
+    }
 });
 
 // ─── Event Delegation ─────────────────────────────────────────────────────────
@@ -419,6 +431,7 @@ function renderProducts() {
     }
     list.innerHTML = '';
     filtered.forEach(p => list.appendChild(buildCard(p)));
+    updateNextCheckCountdowns();
 }
 
 function parseDbDate(value) {
@@ -434,6 +447,62 @@ function parseDbDate(value) {
     return Number.isNaN(fallback.getTime()) ? null : fallback;
 }
 
+function getNextCheckDate(product) {
+    if (!product?.is_active) return null;
+
+    const explicitNextCheck = parseDbDate(product.next_check_at);
+    if (explicitNextCheck) return explicitNextCheck;
+
+    const lastCheckedAt = parseDbDate(product.last_checked_at);
+    const trackingMinutes = Math.max(1, parseInt(product?.tracking_interval || '10', 10) || 10);
+    if (!lastCheckedAt) return null;
+
+    return new Date(lastCheckedAt.getTime() + (trackingMinutes * 60 * 1000));
+}
+
+function formatRemaining(ms) {
+    if (ms <= 0) return 'Hazır';
+
+    const totalSeconds = Math.ceil(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    if (hours > 0) {
+        return `${hours}sa ${String(minutes).padStart(2, '0')}dk ${String(seconds).padStart(2, '0')}sn`;
+    }
+    if (minutes > 0) {
+        return `${minutes}dk ${String(seconds).padStart(2, '0')}sn`;
+    }
+    return `${seconds}sn`;
+}
+
+function updateNextCheckCountdowns() {
+    document.querySelectorAll('.next-check-badge').forEach((node) => {
+        const productId = parseInt(node.dataset.productId || '0', 10);
+        const product = products.find((item) => item.id === productId);
+        if (!product) return;
+
+        if (!product.is_active) {
+            node.textContent = 'Pasif';
+            node.title = 'Takip kapalı';
+            return;
+        }
+
+        const nextCheckDate = getNextCheckDate(product);
+        if (!nextCheckDate) {
+            node.textContent = 'Planlanıyor';
+            node.title = 'Henüz sonraki tarama zamanı hesaplanamadı';
+            return;
+        }
+
+        const remaining = nextCheckDate.getTime() - Date.now();
+        node.textContent = formatRemaining(remaining);
+        node.title = `Sonraki tarama: ${formatDateTime(nextCheckDate.toISOString())}`;
+        node.classList.toggle('is-due', remaining <= 0);
+    });
+}
+
 // ─── Card Builder ─────────────────────────────────────────────────────────────
 function buildCard(p) {
     const isError = p.last_extraction_status && p.last_extraction_status !== 'SUCCESS';
@@ -442,6 +511,12 @@ function buildCard(p) {
     const price = p.last_price;
     const vtype = p.value_type || 'price';
     const cond = p.alert_condition_type || 'all';
+    const nextCheckDate = getNextCheckDate(p);
+    const nextCheckLabel = !p.is_active
+        ? 'Pasif'
+        : !nextCheckDate
+            ? 'Planlanıyor'
+            : formatRemaining(nextCheckDate.getTime() - Date.now());
 
     const card = document.createElement('div');
     card.className = 'card' + (isError ? ' has-error' : '') + (isDisabled ? ' is-disabled' : '');
@@ -466,6 +541,7 @@ function buildCard(p) {
             <div class="card-meta">
                 <span class="date-badge ${isError ? 'error' : isDisabled ? 'old' : ''}"
                     title="${isError ? (p.last_failure_reason || 'Error') : 'Click to view history'}">${checkedAt ? formatDate(checkedAt) : '—'}</span>
+                <span class="next-check-badge" data-product-id="${p.id}" title="${nextCheckDate ? `Sonraki tarama: ${formatDateTime(nextCheckDate.toISOString())}` : 'Henüz sonraki tarama zamanı hesaplanamadı'}">${nextCheckLabel}</span>
                 ${p.last_failure_reason === 'PRICE_ERROR' ? '<span style="background:#ef4444;color:white;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700">ELEMENT YOK</span>' : ''}
                 <span class="price-val">${formatCurrentVal(p)}</span>
             </div>
@@ -671,8 +747,7 @@ async function toggleHistory(id) {
         const res = await fetch(`${API}/products/${id}/changes`);
         const rows = await res.json();
         const product = products.find(p => p.id === id);
-
-        if (!rows.length) { el.innerHTML = `<div style="padding:6px;color:var(--muted);font-size:12px">${t('card.history_none')}</div>`; return; }
+        const trackedSelectors = getTrackedSelectors(product);
 
         const parseDetails = (row) => {
             try {
@@ -684,9 +759,7 @@ async function toggleHistory(id) {
         };
 
         const fallbackSelectorMeta = (row) => {
-            const primary = String(product?.selector_price || '').trim();
-            const secondarySelectors = parseSelectorList(product?.selector_secondary);
-            const allSelectors = [primary, ...secondarySelectors].filter(Boolean);
+            const allSelectors = trackedSelectors;
             const selector = String(row.field_changed || '').trim();
             const cssIndex = selector ? allSelectors.indexOf(selector) + 1 : 0;
             return {
@@ -695,7 +768,31 @@ async function toggleHistory(id) {
             };
         };
 
-        el.innerHTML = rows.slice(0, 15).map((r) => `
+        const selectorsWithHistory = new Set(
+            rows.map((row) => {
+                const details = { ...fallbackSelectorMeta(row), ...parseDetails(row) };
+                return String(details.selector || '').trim();
+            }).filter(Boolean)
+        );
+
+        const trackedSelectorsHtml = trackedSelectors.length
+            ? `
+                <div style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02)">
+                    <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;font-weight:600">Aktif takip edilen CSS alanları</div>
+                    <div style="display:flex;flex-direction:column;gap:6px">
+                        ${trackedSelectors.map((selector, index) => `
+                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                                <span style="background:rgba(59,130,246,0.18); color:#93c5fd; padding:2px 6px; border-radius:999px; font-size:10px">CSS #${index + 1}</span>
+                                <span style="background:rgba(255,255,255,0.08); color:#e2e8f0; padding:2px 8px; border-radius:999px; font-size:10px; max-width:100%; overflow:hidden; text-overflow:ellipsis">${escHTML(selector)}</span>
+                                <span style="font-size:10px; color:${selectorsWithHistory.has(selector) ? '#34d399' : '#94a3b8'}">${selectorsWithHistory.has(selector) ? 'Geçmişte kayıt var' : 'Henüz değişim kaydı yok'}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `
+            : '';
+
+        const changeRowsHtml = rows.length ? rows.slice(0, 15).map((r) => `
             ${(() => {
                 const details = { ...fallbackSelectorMeta(r), ...parseDetails(r) };
                 const badges = [];
@@ -715,7 +812,9 @@ async function toggleHistory(id) {
             </div>
         `;
             })()}
-        `).join('');
+        `).join('') : `<div style="padding:10px 12px;color:var(--muted);font-size:12px">${t('card.history_none')}</div>`;
+
+        el.innerHTML = `${trackedSelectorsHtml}${changeRowsHtml}`;
     } catch { el.innerHTML = `<div style="padding:6px;color:var(--muted);font-size:12px">${t('card.history_fail')}</div>`; }
 }
 
@@ -783,6 +882,7 @@ async function patchProduct(id, updates) {
         });
         const p = products.find(x => x.id === id);
         if (p) Object.assign(p, updates);
+        updateNextCheckCountdowns();
     } catch (e) { console.error('Patch failed:', e); }
 }
 
