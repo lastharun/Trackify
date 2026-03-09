@@ -1,9 +1,9 @@
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import pngToIco from 'png-to-ico';
+import sharp from 'sharp';
 
 const __filename = fileURLToPath(import.meta.url);
 const rootDir = path.resolve(path.dirname(__filename), '..');
@@ -18,14 +18,12 @@ const sizes = [16, 32, 64, 128, 256, 512];
 fs.mkdirSync(buildDir, { recursive: true });
 
 const pngBuffers = await Promise.all(
-    [16, 24, 32, 48, 64, 128, 256].map((size) => {
-        const output = path.join(os.tmpdir(), `trackify-${size}.png`);
-        if (process.platform === 'darwin') {
-            execFileSync('sips', ['-z', String(size), String(size), sourcePng, '--out', output], { stdio: 'ignore' });
-            return fs.promises.readFile(output);
-        }
-        return fs.promises.readFile(sourcePng);
-    })
+    [16, 24, 32, 48, 64, 128, 256].map((size) =>
+        sharp(sourcePng)
+            .resize(size, size, { fit: 'contain' })
+            .png()
+            .toBuffer()
+    )
 );
 
 const icoBuffer = await pngToIco(pngBuffers);
@@ -39,12 +37,15 @@ if (process.platform === 'darwin') {
         const oneX = path.join(iconsetDir, `icon_${size}x${size}.png`);
         const twoX = path.join(iconsetDir, `icon_${size}x${size}@2x.png`);
 
-        execFileSync('sips', ['-z', String(size), String(size), sourcePng, '--out', oneX], { stdio: 'ignore' });
-        execFileSync('sips', ['-z', String(size * 2), String(size * 2), sourcePng, '--out', twoX], { stdio: 'ignore' });
+        await sharp(sourcePng).resize(size, size, { fit: 'contain' }).png().toFile(oneX);
+        await sharp(sourcePng).resize(size * 2, size * 2, { fit: 'contain' }).png().toFile(twoX);
     }
 
     execFileSync('iconutil', ['-c', 'icns', iconsetDir, '-o', icnsPath], { stdio: 'ignore' });
 }
 
-console.log(`Desktop assets generated:
-- ${icoPath}`);
+console.log(
+    `Desktop assets generated:\n` +
+    `${process.platform === 'darwin' ? `- ${icnsPath}\n` : ''}` +
+    `- ${icoPath}`
+);
