@@ -39,8 +39,10 @@ function mapRegistryHealth(health) {
     return { label: 'Bekliyor', className: 'status-unknown' };
 }
 
-function mapBackendHealth(health) {
+function mapBackendHealth(health, proc) {
     if (health?.ok) return { label: 'Hazir', className: 'status-active' };
+    if (proc?.running) return { label: 'Basliyor', className: 'status-warning' };
+    if (proc?.lastExitCode !== null && proc?.lastExitCode !== undefined) return { label: 'Coktu', className: 'status-error' };
     if (health?.error) return { label: 'Kapali', className: 'status-error' };
     return { label: 'Bekliyor', className: 'status-unknown' };
 }
@@ -73,9 +75,16 @@ function renderState(state) {
         ? `Registry erisimi aktif. Son kontrol: ${formatTime(state.registryHealth.checked_at)}`
         : (state.registryHealth?.error || 'Merkezi servis bekleniyor'));
 
-    setStatus('backend-status', 'backend-detail', mapBackendHealth(state.backendHealth), state.backendHealth?.ok
+    const backendDetail = state.backendHealth?.ok
         ? `Backend saglikli. Son kontrol: ${formatTime(state.backendHealth.time)}`
-        : (state.backendHealth?.error || 'Yerel backend kapali'));
+        : (state.backend?.running
+            ? 'Backend processi acik, health cevabi bekleniyor...'
+            : (state.backend?.lastError
+                || (state.backend?.lastExitCode !== null && state.backend?.lastExitCode !== undefined
+                    ? `Son cikis kodu: ${state.backend.lastExitCode}`
+                    : state.backendHealth?.error)
+                || 'Yerel backend kapali'));
+    setStatus('backend-status', 'backend-detail', mapBackendHealth(state.backendHealth, state.backend), backendDetail);
 
     setStatus('worker-status', 'worker-detail', mapProcessState(state.worker), state.worker?.running
         ? 'Worker arka planda tarama yapiyor'
@@ -92,12 +101,14 @@ function renderState(state) {
         ? `Yeni surum ${state.extensionUpdate.version} hazir. Son kontrol: ${formatTime(state.extensionUpdate.checked_at)}`
         : (state.extensionUpdate?.version
             ? `Son paket ${state.extensionUpdate.version}. Dosya: ${state.extensionUpdate.file_name || '-'}`
-            : (state.extensionUpdate?.error || 'Manifest bekleniyor'));
+            : (state.extensionUpdate?.download_url
+                ? `Manifest olmasa da son yuklenen paket indirilebilir. Dosya: ${state.extensionUpdate.file_name || 'Trackify-Extension-latest.zip'}`
+                : (state.extensionUpdate?.error || 'Manifest bekleniyor')))
     setStatus('extension-status', 'extension-detail', extensionState, extensionDetail);
 
     $('extension-download-hint').textContent = state.extensionUpdate?.downloadedFile
         ? `Son indirilen dosya: ${state.extensionUpdate.downloadedFile}`
-        : 'Yeni paket varsa Downloads klasorune indirilir.';
+        : 'Buton son yuklenen ZIP paketini Downloads klasorune indirir.';
     $('extension-install-hint').textContent = state.extensionUpdate?.install_hint || "Windows store disi Chrome uzantisi otomatik kurulmaz; masaustu uygulama sadece yeni paketi indirir ve kurulum adimini gosterir.";
     $('install-guide-file').textContent = state.extensionUpdate?.downloadedFile
         ? `Dosya: ${state.extensionUpdate.downloadedFile}`
@@ -116,10 +127,14 @@ function renderState(state) {
     $('logs').textContent = logs.join('\n');
 
     const summary = [];
-    summary.push(state.backendHealth?.ok ? 'Backend hazir.' : 'Backend kapali.');
+    summary.push(state.backendHealth?.ok ? 'Backend hazir.' : (state.backend?.running ? 'Backend basliyor.' : 'Backend kapali.'));
     summary.push(state.worker?.running ? 'Worker calisiyor.' : 'Worker bekliyor.');
     summary.push(state.access?.blocked ? 'Cihaz su an engelli.' : 'Cihaz aktif durumda.');
-    summary.push(state.extensionUpdate?.available ? `Uzanti ${state.extensionUpdate.version} indirilmeyi bekliyor.` : 'Uzanti paket durumu normal.');
+    summary.push(
+        state.extensionUpdate?.available
+            ? `Uzanti ${state.extensionUpdate.version} indirilmeyi bekliyor.`
+            : (state.extensionUpdate?.download_url ? 'Son ZIP paketi indirilebilir.' : 'Uzanti paket durumu kontrol edilemedi.')
+    );
     $('summary-text').textContent = summary.join(' ');
 
     toggleHidden('onboarding-overlay', Boolean(state.preferences?.onboardingCompleted));

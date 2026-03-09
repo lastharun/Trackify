@@ -8,6 +8,8 @@ const PANEL_URL = process.env.TRACKIFY_PANEL_URL || 'https://registry.harunhatir
 const LOCAL_API = process.env.TRACKIFY_LOCAL_API || 'http://127.0.0.1:3001';
 const REGISTRY_API = process.env.TRACKIFY_REGISTRY_API || 'https://registry.harunhatirkirmaz.com/api';
 const MAX_LOG_LINES = 200;
+const STATUS_POLL_MS = 15 * 1000;
+const STARTUP_REFRESH_DELAYS = [1500, 5000];
 const rootDir = path.join(__dirname, '..');
 
 let mainWindow = null;
@@ -20,6 +22,29 @@ let logs = [];
 let desktopAccessState = { status: 'unknown', blocked: false, reason: null, blocked_until: null };
 let desktopDevice = null;
 let extensionUpdateState = { version: null, available: false, checked_at: null, downloadedFile: null };
+
+function getRegistryBaseUrl() {
+    return REGISTRY_API.replace(/\/api$/, '');
+}
+
+function getExtensionFallbackState() {
+    return {
+        product: 'trackify-extension',
+        version: extensionUpdateState?.version || null,
+        file_name: 'Trackify-Extension-latest.zip',
+        download_url: '/downloads/Trackify-Extension-latest.zip',
+        latest_download_url: '/downloads/Trackify-Extension-latest.zip',
+        install_hint: 'Manifest olmasa bile son yuklenen ZIP indirilebilir. Kurulum kullanici tarafinda chrome://extensions ekranindan manuel yapilir.'
+    };
+}
+
+function scheduleStateRefresh(delays = STARTUP_REFRESH_DELAYS) {
+    for (const delay of delays) {
+        setTimeout(() => {
+            publishState().catch(() => { });
+        }, delay);
+    }
+}
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -260,6 +285,25 @@ async function checkExtensionUpdate() {
             });
         }
     } catch (error) {
+        try {
+            const latestUrl = new URL('/downloads/Trackify-Extension-latest.zip', `${getRegistryBaseUrl()}/`).toString();
+            const latestRes = await fetch(latestUrl, { method: 'HEAD' });
+            if (latestRes.ok) {
+                const prefs = readDesktopPrefs();
+                extensionUpdateState = {
+                    ...getExtensionFallbackState(),
+                    available: false,
+                    checked_at: new Date().toISOString(),
+                    downloadedFile: prefs.lastDownloadedExtensionFile || null,
+                    error: null
+                };
+                pushLog('extension-update', 'Manifest bulunamadi, latest ZIP fallback kullaniliyor.');
+                return;
+            }
+        } catch {
+            // Ignore fallback probe errors and expose the manifest error below.
+        }
+
         extensionUpdateState = {
             ...extensionUpdateState,
             error: error.message,
@@ -272,10 +316,16 @@ async function checkExtensionUpdate() {
 async function downloadExtensionUpdate() {
     await checkExtensionUpdate();
     if (!extensionUpdateState?.download_url) {
-        throw new Error('Guncelleme paketi bulunamadi.');
+        extensionUpdateState = {
+            ...extensionUpdateState,
+            ...getExtensionFallbackState()
+        };
+    }
+    if (!extensionUpdateState?.download_url) {
+        throw new Error('ZIP paketi bulunamadi.');
     }
 
-    const downloadUrl = new URL(extensionUpdateState.download_url, REGISTRY_API.replace(/\/api$/, '/')).toString();
+    const downloadUrl = new URL(extensionUpdateState.download_url, `${getRegistryBaseUrl()}/`).toString();
     const targetPath = path.join(app.getPath('downloads'), extensionUpdateState.file_name || `Trackify-Extension-${extensionUpdateState.version || 'latest'}.zip`);
     const res = await fetch(downloadUrl);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -345,6 +395,7 @@ async function startBackendProcess() {
     });
     attachProcessLogs(backendProcess, 'backend');
     pushLog('desktop', 'Backend baslatildi.');
+    scheduleStateRefresh();
 }
 
 async function startWorkerProcess() {
@@ -367,6 +418,7 @@ async function startWorkerProcess() {
     });
     attachProcessLogs(workerProcess, 'worker');
     pushLog('desktop', 'Worker baslatildi.');
+    scheduleStateRefresh();
 }
 
 async function stopManagedServices() {
@@ -383,6 +435,7 @@ async function startManagedServices() {
     }
     await startBackendProcess();
     await startWorkerProcess();
+    scheduleStateRefresh();
 }
 
 async function restartManagedServices() {
@@ -476,8 +529,9 @@ app.whenReady().then(() => {
         refreshRegistryAccess('heartbeat').catch(() => { });
         checkExtensionUpdate().catch(() => { });
         publishState().catch(() => { });
-    }, 60 * 1000);
+    }, STATUS_POLL_MS);
     publishState().catch(() => { });
+    scheduleStateRefresh([1000, 3000, 8000]);
 });
 
 app.on('before-quit', () => {
