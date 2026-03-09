@@ -24,7 +24,7 @@ export default function Dashboard() {
 
     const [newUrl, setNewUrl] = useState('');
     const [newDomain, setNewDomain] = useState('trendyol');
-    const [newInterval, setNewInterval] = useState(30);
+    const [newInterval, setNewInterval] = useState(10);
     const [loading, setLoading] = useState(false);
     const [now, setNow] = useState(Date.now());
 
@@ -210,16 +210,15 @@ export default function Dashboard() {
                                             </select>
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-bold text-slate-500 ml-1">SIKLIK</label>
-                                            <select
+                                            <label className="text-[10px] font-bold text-slate-500 ml-1">SIKLIK (DAKIKA)</label>
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                max={1440}
                                                 className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm"
-                                                value={newInterval} onChange={e => setNewInterval(Number(e.target.value))}
-                                            >
-                                                <option value={1}>1 Dakika</option>
-                                                <option value={30}>30 Dakika</option>
-                                                <option value={60}>1 Saat</option>
-                                                <option value={1440}>1 Gün</option>
-                                            </select>
+                                                value={newInterval}
+                                                onChange={e => setNewInterval(Math.max(1, Math.min(1440, Number(e.target.value) || 10)))}
+                                            />
                                         </div>
                                         <div className="space-y-1.5">
                                             <label className="text-[10px] font-bold text-slate-500 ml-1">ÜRÜN URL</label>

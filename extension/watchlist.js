@@ -115,10 +115,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('bulk-export').addEventListener('click', exportToFile);
 
     document.getElementById('bulk-interval').addEventListener('input', e => {
-        document.getElementById('bulk-interval-val').textContent = formatInterval(parseInt(e.target.value));
+        const next = Math.max(1, Math.min(1440, parseInt(e.target.value || '10', 10) || 10));
+        document.getElementById('bulk-interval').value = next;
+        document.getElementById('bulk-interval-number').value = next;
+        document.getElementById('bulk-interval-val').textContent = formatInterval(next);
     });
     document.getElementById('bulk-interval').addEventListener('change', e => {
-        bulkPatch({ tracking_interval: parseInt(e.target.value) });
+        const next = Math.max(1, Math.min(1440, parseInt(e.target.value || '10', 10) || 10));
+        bulkPatch({ tracking_interval: next });
+    });
+    document.getElementById('bulk-interval-number').addEventListener('input', e => {
+        const next = Math.max(1, Math.min(1440, parseInt(e.target.value || '10', 10) || 10));
+        document.getElementById('bulk-interval').value = next;
+        document.getElementById('bulk-interval-number').value = next;
+        document.getElementById('bulk-interval-val').textContent = formatInterval(next);
+    });
+    document.getElementById('bulk-interval-number').addEventListener('change', e => {
+        const next = Math.max(1, Math.min(1440, parseInt(e.target.value || '10', 10) || 10));
+        bulkPatch({ tracking_interval: next });
     });
 
     document.getElementById('bulk-wait').addEventListener('input', e => {
@@ -462,8 +476,13 @@ function buildCard(p) {
                 </div>
                 <div style="display:flex; flex-direction:column; gap:8px;">
                     <span>Tracking Interval: <span class="iv-label" style="color:var(--primary);font-weight:700">${formatInterval(p.tracking_interval || 10)}</span></span>
-                    <input type="range" min="1" max="1440" value="${p.tracking_interval || 10}" data-field="tracking_interval"
-                        onchange="patchProduct(${p.id}, {tracking_interval: parseInt(this.value)})" style="accent-color:var(--primary);width:160px">
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <input type="range" min="1" max="1440" value="${p.tracking_interval || 10}" data-field="tracking_interval"
+                            onchange="patchProduct(${p.id}, {tracking_interval: parseInt(this.value)})" style="accent-color:var(--primary);width:160px">
+                        <input type="number" min="1" max="1440" value="${p.tracking_interval || 10}" style="width:80px"
+                            oninput="this.previousElementSibling.value=this.value; this.parentElement.previousElementSibling.querySelector('.iv-label').textContent=formatInterval(parseInt(this.value||10))"
+                            onchange="patchProduct(${p.id}, {tracking_interval: parseInt(this.value||10)})">
+                    </div>
                 </div>
             </div>
             <div class="settings-row" style="margin-top:10px">

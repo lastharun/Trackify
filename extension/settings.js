@@ -64,7 +64,7 @@ function normalizeProductForExport(product) {
         selector_image: product.selector_image || null,
         last_image_url: product.last_image_url || null,
         value_type: product.value_type || 'string',
-        tracking_interval: Number(product.tracking_interval) || 30,
+        tracking_interval: Number(product.tracking_interval) || 10,
         wait_on_page: Number(product.wait_on_page) || 4,
         never_stop: Number(product.never_stop) ? 1 : 0,
         is_active: Number(product.is_active) ? 1 : 0,
@@ -149,7 +149,7 @@ async function importTrackingsJson(file) {
                     selector_image: item.selector_image || null,
                     last_image_url: item.last_image_url || null,
                     value_type: item.value_type || 'string',
-                    trackingInterval: Number(item.tracking_interval) || 30,
+                    trackingInterval: Number(item.tracking_interval) || 10,
                     wait_on_page: Number(item.wait_on_page) || 4,
                     never_stop: Number(item.never_stop) ? 1 : 0
                 };
@@ -167,7 +167,7 @@ async function importTrackingsJson(file) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: item.title || '',
-                        tracking_interval: Number(item.tracking_interval) || 30,
+                        tracking_interval: Number(item.tracking_interval) || 10,
                         wait_on_page: Number(item.wait_on_page) || 4,
                         never_stop: Number(item.never_stop) ? 1 : 0,
                         is_active: Number(item.is_active) ? 1 : 0,
@@ -236,8 +236,9 @@ async function loadSettings() {
     if (s.telegram_user_id) document.getElementById('telegram-id').value = s.telegram_user_id;
     if (s.language) document.getElementById('language').value = s.language;
 
-    const iv = parseInt(s.default_interval || 60);
+    const iv = parseInt(s.default_interval || 10);
     document.getElementById('default-interval').value = iv;
+    document.getElementById('default-interval-number').value = iv;
     document.getElementById('iv-label').textContent = fmt(iv);
 
     const disc = s.min_discount !== undefined ? parseInt(s.min_discount) : 0;
@@ -272,6 +273,25 @@ function bindSlider(id, key, labelId, unit) {
     el?.addEventListener('change', e => saveSetting(key, e.target.value));
 }
 
+function bindIntervalControls() {
+    const range = document.getElementById('default-interval');
+    const number = document.getElementById('default-interval-number');
+    const label = document.getElementById('iv-label');
+
+    const applyValue = (raw, persist) => {
+        const next = Math.max(1, Math.min(1440, parseInt(raw || '10', 10) || 10));
+        range.value = String(next);
+        number.value = String(next);
+        label.textContent = fmt(next);
+        if (persist) saveSetting('default_interval', String(next));
+    };
+
+    range?.addEventListener('input', e => applyValue(e.target.value, false));
+    range?.addEventListener('change', e => applyValue(e.target.value, true));
+    number?.addEventListener('input', e => applyValue(e.target.value, false));
+    number?.addEventListener('change', e => applyValue(e.target.value, true));
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     await loadLanguage();
     await enforceAccessState();
@@ -287,7 +307,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     bindToggle('never-stop', 'never_stop_on_errors');
 
     // Slider bindings
-    bindSlider('default-interval', 'default_interval', 'iv-label', 'time');
+    bindIntervalControls();
     bindSlider('min-discount', 'min_discount', 'discount-label', '%');
     bindSlider('wait-on-page', 'wait_on_page', 'wait-label', 's');
 

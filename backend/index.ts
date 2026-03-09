@@ -229,7 +229,7 @@ app.post('/api/products', (req, res) => {
         console.log(`[POST /api/products] Original body:`, JSON.stringify(req.body));
         console.log(`[POST /api/products] Current settings:`, JSON.stringify(s));
 
-        if (!trackingInterval) trackingInterval = parseInt(s.default_interval || '30');
+        if (!trackingInterval) trackingInterval = parseInt(s.default_interval || '10');
         if (wait_on_page === undefined) wait_on_page = parseInt(s.wait_on_page || '4');
         if (never_stop === undefined) never_stop = s.never_stop_on_errors === '1' ? 1 : 0;
 
@@ -278,7 +278,7 @@ app.post('/api/products', (req, res) => {
             const s = Object.fromEntries(settingsRows.map(r => [r.key, r.value]));
 
             updateQueries.push('tracking_interval = ?');
-            updateParams.push(parseInt(s.default_interval || '30'));
+            updateParams.push(parseInt(s.default_interval || '10'));
 
             updateQueries.push('wait_on_page = ?');
             updateParams.push(parseInt(s.wait_on_page || '4'));

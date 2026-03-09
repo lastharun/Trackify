@@ -140,7 +140,7 @@ async function handleCommand(text: string, fromId: string) {
                 const stmt = db.prepare(
                     'INSERT INTO products (url, domain, tracking_interval, created_at, updated_at, last_viewed_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)'
                 );
-                const info = stmt.run(url, domain, 30);
+                const info = stmt.run(url, domain, 10);
                 await sendMessage(fromId, `✅ Ürün eklendi! ID: <code>${info.lastInsertRowid}</code>\nDomain: ${domain}`);
             } catch (err: any) {
                 await sendMessage(fromId, `❌ Ekleme hatası: ${err.message}`);

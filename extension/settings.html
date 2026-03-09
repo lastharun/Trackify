@@ -433,10 +433,11 @@
             <div class="setting-row">
                 <span class="setting-name">
                     <span data-i18n="set.def_interval">Kontrol Aralığı:</span>
-                    <span id="iv-label" style="color:var(--primary);font-weight:700;margin-left:4px">01:00</span>
+                    <span id="iv-label" style="color:var(--primary);font-weight:700;margin-left:4px">00:10</span>
                 </span>
                 <div class="slider-row">
-                    <input type="range" id="default-interval" min="1" max="1440" value="60">
+                    <input type="range" id="default-interval" min="1" max="1440" value="10">
+                    <input type="number" id="default-interval-number" min="1" max="1440" value="10" style="width:90px">
                 </div>
             </div>
             <div class="setting-row">

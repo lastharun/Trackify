@@ -712,8 +712,9 @@
         <button class="bulk-btn bulk-btn-green" id="bulk-enable" data-i18n="bulk.enable">enable</button>
         <button class="bulk-btn bulk-btn-outline" id="bulk-disable" data-i18n="bulk.disable">disable</button>
         <div class="bulk-slider-group">
-            <span data-i18n="bulk.interval">Tracking Interval:</span> <b id="bulk-interval-val">01:00</b>
-            <input type="range" id="bulk-interval" min="1" max="1440" value="60">
+            <span data-i18n="bulk.interval">Tracking Interval:</span> <b id="bulk-interval-val">00:10</b>
+            <input type="range" id="bulk-interval" min="1" max="1440" value="10">
+            <input type="number" id="bulk-interval-number" min="1" max="1440" value="10" style="width:80px">
         </div>
         <button class="bulk-btn bulk-btn-gray" id="bulk-clear-history" data-i18n="bulk.clear_history">Clear
             history</button>
