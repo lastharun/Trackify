@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Trackify Takip Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --sidebar-bg: #1e293b;
+            --card-bg: #1e293b;
+            --primary: #ef4444;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --success: #10b981;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 240px;
+            background: var(--sidebar-bg);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 40px;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            color: var(--text-muted);
+            text-decoration: none;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            transition: all 0.2s;
+        }
+
+        .nav-link.active {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--primary);
+        }
+
+        .nav-link:hover:not(.active) {
+            background: rgba(248, 250, 252, 0.05);
+            color: var(--text);
+        }
+
+        /* Main Content */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 40px;
+            overflow-y: auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+        }
+
+        .search-container {
+            flex: 1;
+            max-width: 600px;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            background: var(--sidebar-bg);
+            border: 1px solid var(--border);
+            padding: 12px 16px 12px 44px;
+            border-radius: 12px;
+            color: var(--text);
+            font-size: 14px;
+        }
+
+        /* Tags */
+        .tags {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+
+        .tag {
+            padding: 4px 12px;
+            background: var(--sidebar-bg);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            color: var(--text-muted);
+        }
+
+        .tag.active {
+            background: #fff;
+            color: #000;
+            border-color: #fff;
+        }
+
+        /* Product Cards */
+        .product-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .product-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            position: relative;
+            transition: all 0.2s;
+        }
+
+        .product-card:hover {
+            border-color: var(--primary);
+            transform: scale(1.005);
+        }
+
+        .product-img {
+            width: 80px;
+            height: 80px;
+            background: #fff;
+            border-radius: 12px;
+            object-fit: contain;
+        }
+
+        .product-main {
+            flex: 1;
+        }
+
+        .product-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .product-meta {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .price-text {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        /* Bulk Bar */
+        .bulk-bar {
+            position: fixed;
+            bottom: 40px;
+            left: 280px;
+            right: 40px;
+            background: #1e293b;
+            border: 1px solid var(--border);
+            padding: 16px 24px;
+            border-radius: 16px;
+            display: none;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-bulk {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn-delete {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-enable {
+            background: var(--success);
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="sidebar">
+        <div class="logo">
+            <img src="icon.png" style="width:32px;height:32px;border-radius:8px;" alt="PT">
+            <span class="logo-name">Trackify Takip</span>
+        </div>
+        <a href="watchlist.html" class="nav-link">
+            <span>📋</span>
+            <span>Watchlist</span>
+        </a>
+        <a href="settings.html" class="nav-link">
+            <span>⚙️</span>
+            <span>Settings</span>
+        </a>
+        <a href="settings.html#help" class="nav-link">
+            <span>❓</span>
+            <span>Help</span>
+        </a>
+
+        <div style="margin-top: auto; padding-top: 20px; border-top: 1px solid var(--border);">
+            <div class="nav-link" onclick="window.open('https://t.me/trackifytakipbot')" style="cursor:pointer">
+                <span>✈️</span>
+                <span>Telegram</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="main">
+        <div class="header">
+            <div class="search-container">
+                <input type="text" class="search-input" placeholder="Search...">
+            </div>
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <span id="total-count">Total: 0</span>
+                <button id="refresh-btn"
+                    style="background:none; border:none; color:white; cursor:pointer; font-size:20px;">🔄</button>
+            </div>
+        </div>
+
+        <div class="tags">
+            <div class="tag active">all</div>
+            <div class="tag">best</div>
+            <div class="tag">strings</div>
+            <div class="tag">on</div>
+            <div class="tag">off</div>
+            <div class="tag">errors</div>
+        </div>
+
+        <div id="product-list" class="product-list">
+            <!-- Products injected here -->
+        </div>
+
+        <div id="bulk-bar" class="bulk-bar">
+            <div style="font-size: 14px;">Selected: <span id="selected-count">0</span> / <span id="max-count">0</span>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <button class="btn-bulk btn-enable">enable</button>
+                <button class="btn-bulk btn-delete">delete trackings</button>
+                <button id="close-bulk" class="btn-bulk" style="background: #334155; color: white;">close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="dashboard.js"></script>
+</body>
+
+</html>

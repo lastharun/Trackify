@@ -1,0 +1,16 @@
+[Unit]
+Description=Trackify Registry
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/ticarettakip
+EnvironmentFile=/var/www/ticarettakip/.env.registry
+ExecStart=/usr/bin/node --import tsx /var/www/ticarettakip/registry/index.ts
+Restart=always
+RestartSec=3
+User=www-data
+Group=www-data
+
+[Install]
+WantedBy=multi-user.target

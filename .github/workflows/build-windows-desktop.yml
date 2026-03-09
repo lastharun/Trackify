@@ -1,0 +1,48 @@
+name: Build Windows Desktop
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "desktop/**"
+      - "backend/**"
+      - "workers/**"
+      - "database/**"
+      - "extractors/**"
+      - "notifications/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "extension/icon.png"
+
+jobs:
+  build-win:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer
+        run: npm run dist:desktop:win
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Trackify-Windows-Installer
+          path: |
+            release/*.exe
+            release/*.yml
+            release/latest*.yml
+          if-no-files-found: error

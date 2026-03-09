@@ -1,0 +1,52 @@
+{
+    "manifest_version": 3,
+    "name": "Trackify Takip",
+    "version": "2.0",
+    "description": "Track prices on any website. Get notified when prices drop.",
+    "short_name": "Trackify",
+    "permissions": [
+        "tabs",
+        "storage",
+        "activeTab",
+        "scripting",
+        "notifications",
+        "alarms"
+    ],
+    "host_permissions": [
+        "https://*/*",
+        "http://*/*",
+        "http://localhost:3001/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "https://*/*",
+                "http://*/*"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": "icon.png",
+        "default_title": "Price Tracker"
+    },
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "watchlist.html",
+                "settings.html",
+                "icon.png"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        }
+    ]
+}

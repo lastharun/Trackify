@@ -1,0 +1,559 @@
+const { app, BrowserWindow, Menu, Tray, nativeImage, shell, ipcMain, Notification } = require('electron');
+const { spawn } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const PANEL_URL = process.env.TRACKIFY_PANEL_URL || 'https://registry.harunhatirkirmaz.com/panel/';
+const LOCAL_API = process.env.TRACKIFY_LOCAL_API || 'http://127.0.0.1:3001';
+const REGISTRY_API = process.env.TRACKIFY_REGISTRY_API || 'https://registry.harunhatirkirmaz.com/api';
+const MAX_LOG_LINES = 200;
+const rootDir = path.join(__dirname, '..');
+
+let mainWindow = null;
+let tray = null;
+let isQuitting = false;
+let backendProcess = null;
+let workerProcess = null;
+let statusTimer = null;
+let logs = [];
+let desktopAccessState = { status: 'unknown', blocked: false, reason: null, blocked_until: null };
+let desktopDevice = null;
+let extensionUpdateState = { version: null, available: false, checked_at: null, downloadedFile: null };
+
+function createWindow() {
+    mainWindow = new BrowserWindow({
+        width: 1520,
+        height: 980,
+        minWidth: 1180,
+        minHeight: 800,
+        title: 'Trackify Control Center',
+        backgroundColor: '#0b1020',
+        autoHideMenuBar: true,
+        webPreferences: {
+            contextIsolation: true,
+            sandbox: false,
+            preload: path.join(__dirname, 'preload.js')
+        }
+    });
+
+    mainWindow.loadFile(path.join(__dirname, 'index.html'));
+
+    mainWindow.on('minimize', (event) => {
+        event.preventDefault();
+        mainWindow.hide();
+    });
+
+    mainWindow.on('close', (event) => {
+        if (isQuitting) return;
+        event.preventDefault();
+        mainWindow.hide();
+    });
+}
+
+function pushLog(source, message) {
+    const line = `[${new Date().toLocaleTimeString('tr-TR')}] [${source}] ${String(message).trim()}`;
+    logs.push(line);
+    if (logs.length > MAX_LOG_LINES) logs = logs.slice(-MAX_LOG_LINES);
+    publishState().catch(() => { });
+}
+
+function getDeviceFile() {
+    return path.join(app.getPath('userData'), 'desktop-device.json');
+}
+
+function getRuntimeDataDir() {
+    const dir = path.join(app.getPath('userData'), 'data');
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+}
+
+function getRuntimeSchemaPath() {
+    return app.isPackaged
+        ? path.join(process.resourcesPath, 'database', 'schema.sql')
+        : path.join(rootDir, 'database', 'schema.sql');
+}
+
+function getDesktopPrefsFile() {
+    return path.join(app.getPath('userData'), 'desktop-prefs.json');
+}
+
+function readDesktopPrefs() {
+    const file = getDesktopPrefsFile();
+    if (!fs.existsSync(file)) return {};
+    try {
+        return JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch {
+        return {};
+    }
+}
+
+function writeDesktopPrefs(nextPrefs) {
+    fs.writeFileSync(getDesktopPrefsFile(), JSON.stringify(nextPrefs, null, 2));
+}
+
+function getDesktopPrefs() {
+    const prefs = readDesktopPrefs();
+    return {
+        onboardingCompleted: Boolean(prefs.onboardingCompleted),
+        launchAtStartup: Boolean(prefs.launchAtStartup),
+        installGuideDismissed: Boolean(prefs.installGuideDismissed),
+        lastNotifiedExtensionVersion: prefs.lastNotifiedExtensionVersion || null,
+        lastDownloadedExtensionFile: prefs.lastDownloadedExtensionFile || null
+    };
+}
+
+function compareVersions(a, b) {
+    const left = String(a || '').split('.').map((n) => Number(n) || 0);
+    const right = String(b || '').split('.').map((n) => Number(n) || 0);
+    const max = Math.max(left.length, right.length);
+    for (let i = 0; i < max; i += 1) {
+        const diff = (left[i] || 0) - (right[i] || 0);
+        if (diff !== 0) return diff;
+    }
+    return 0;
+}
+
+function getLaunchAtStartup() {
+    const prefs = getDesktopPrefs();
+    if (process.platform !== 'win32') {
+        return prefs.launchAtStartup;
+    }
+    try {
+        return Boolean(app.getLoginItemSettings().openAtLogin);
+    } catch {
+        return prefs.launchAtStartup;
+    }
+}
+
+function setLaunchAtStartup(enabled) {
+    const prefs = getDesktopPrefs();
+    writeDesktopPrefs({
+        ...prefs,
+        launchAtStartup: Boolean(enabled)
+    });
+
+    if (process.platform !== 'win32') return prefs;
+
+    try {
+        app.setLoginItemSettings({
+            openAtLogin: Boolean(enabled),
+            path: process.execPath,
+            args: []
+        });
+    } catch (error) {
+        pushLog('desktop', `Startup ayari yazilamadi: ${error.message}`);
+    }
+
+    return getDesktopPrefs();
+}
+
+function updateDesktopPrefs(patch) {
+    const nextPrefs = {
+        ...getDesktopPrefs(),
+        ...patch
+    };
+    writeDesktopPrefs(nextPrefs);
+    return nextPrefs;
+}
+
+function ensureDesktopDevice() {
+    if (desktopDevice) return desktopDevice;
+    const file = getDeviceFile();
+    if (fs.existsSync(file)) {
+        try {
+            desktopDevice = JSON.parse(fs.readFileSync(file, 'utf8'));
+            if (desktopDevice?.device_id) return desktopDevice;
+        } catch { }
+    }
+
+    desktopDevice = {
+        device_id: globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `trackify-desktop-${Date.now()}`,
+        device_name: `Trackify Desktop ${os.hostname()}`,
+        platform: `${os.platform()} ${os.arch()}`
+    };
+    fs.writeFileSync(file, JSON.stringify(desktopDevice, null, 2));
+    return desktopDevice;
+}
+
+async function fetchJson(url, init) {
+    const res = await fetch(url, init);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+}
+
+async function refreshRegistryAccess(mode = 'heartbeat') {
+    const device = ensureDesktopDevice();
+    const endpoint = mode === 'register' ? '/devices/register' : '/devices/heartbeat';
+    try {
+        const data = await fetchJson(`${REGISTRY_API}${endpoint}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-trackify-device-id': device.device_id
+            },
+            body: JSON.stringify({
+                device_id: device.device_id,
+                device_name: device.device_name,
+                platform: device.platform,
+                user_agent: `Trackify Desktop / Electron ${process.versions.electron}`,
+                app_version: app.getVersion()
+            })
+        });
+
+        const wasBlocked = Boolean(desktopAccessState?.blocked);
+        desktopAccessState = {
+            status: data?.status || 'active',
+            blocked: Boolean(data?.blocked),
+            reason: data?.reason || null,
+            blocked_until: data?.blocked_until || null,
+            checked_at: new Date().toISOString()
+        };
+
+        if (desktopAccessState.blocked && !wasBlocked) {
+            new Notification({
+                title: 'Trackify erisimi kapatildi',
+                body: desktopAccessState.reason || 'Bu masaustu cihaz registry tarafinda engellendi.'
+            }).show();
+            await stopManagedServices();
+        }
+
+        if (!desktopAccessState.blocked && wasBlocked) {
+            new Notification({
+                title: 'Trackify erisimi acildi',
+                body: 'Masaustu cihaz tekrar aktif duruma gecti.'
+            }).show();
+        }
+    } catch (error) {
+        desktopAccessState = {
+            ...desktopAccessState,
+            status: desktopAccessState?.status || 'unknown',
+            checked_at: new Date().toISOString(),
+            error: error.message
+        };
+        pushLog('registry', `Erisim kontrol hatasi: ${error.message}`);
+    }
+}
+
+async function checkExtensionUpdate() {
+    try {
+        const manifest = await fetchJson(`${REGISTRY_API}/updates/extension`);
+        const prefs = readDesktopPrefs();
+        const knownVersion = prefs.lastNotifiedExtensionVersion || '0.0.0';
+
+        extensionUpdateState = {
+            ...manifest,
+            available: compareVersions(manifest?.version, knownVersion) > 0,
+            checked_at: new Date().toISOString(),
+            downloadedFile: prefs.lastDownloadedExtensionFile || null
+        };
+
+        if (extensionUpdateState.available && prefs.lastNotifiedExtensionVersion !== manifest.version) {
+            new Notification({
+                title: 'Yeni Trackify uzanti surumu var',
+                body: `Yeni surum ${manifest.version} indirilmeye hazir.`
+            }).show();
+            writeDesktopPrefs({
+                ...prefs,
+                lastNotifiedExtensionVersion: manifest.version,
+                installGuideDismissed: false
+            });
+        }
+    } catch (error) {
+        extensionUpdateState = {
+            ...extensionUpdateState,
+            error: error.message,
+            checked_at: new Date().toISOString()
+        };
+        pushLog('extension-update', `Manifest kontrol hatasi: ${error.message}`);
+    }
+}
+
+async function downloadExtensionUpdate() {
+    await checkExtensionUpdate();
+    if (!extensionUpdateState?.download_url) {
+        throw new Error('Guncelleme paketi bulunamadi.');
+    }
+
+    const downloadUrl = new URL(extensionUpdateState.download_url, REGISTRY_API.replace(/\/api$/, '/')).toString();
+    const targetPath = path.join(app.getPath('downloads'), extensionUpdateState.file_name || `Trackify-Extension-${extensionUpdateState.version || 'latest'}.zip`);
+    const res = await fetch(downloadUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const arrayBuffer = await res.arrayBuffer();
+    fs.writeFileSync(targetPath, Buffer.from(arrayBuffer));
+
+    const prefs = readDesktopPrefs();
+    writeDesktopPrefs({
+        ...prefs,
+        lastDownloadedExtensionFile: targetPath,
+        installGuideDismissed: false
+    });
+    extensionUpdateState.downloadedFile = targetPath;
+
+    new Notification({
+        title: 'Uzanti paketi indirildi',
+        body: `Dosya kaydedildi: ${path.basename(targetPath)}`
+    }).show();
+
+    shell.showItemInFolder(targetPath);
+    return targetPath;
+}
+
+function getProcessDescriptor(kind) {
+    const target = kind === 'backend' ? backendProcess : workerProcess;
+    return {
+        running: Boolean(target && !target.killed),
+        pid: target?.pid || null,
+        lastExitCode: target?.exitCode ?? null,
+        lastError: target?.lastError || null
+    };
+}
+
+function attachProcessLogs(child, source) {
+    child.stdout?.on('data', (chunk) => pushLog(source, chunk.toString()));
+    child.stderr?.on('data', (chunk) => pushLog(source, chunk.toString()));
+    child.on('exit', (code, signal) => {
+        child.exitCode = code;
+        child.lastError = signal ? `signal:${signal}` : null;
+        pushLog(source, `Process exited with code=${code ?? 'null'} signal=${signal ?? 'none'}`);
+        publishState().catch(() => { });
+    });
+    child.on('error', (error) => {
+        child.lastError = error.message;
+        pushLog(source, `Process error: ${error.message}`);
+        publishState().catch(() => { });
+    });
+}
+
+async function startBackendProcess() {
+    if (backendProcess && !backendProcess.killed) return;
+    const runtimeEnv = {
+        ...process.env,
+        TRACKIFY_DB_DIR: getRuntimeDataDir(),
+        TRACKIFY_SCHEMA_PATH: getRuntimeSchemaPath()
+    };
+    const command = app.isPackaged ? process.execPath : process.execPath;
+    const args = app.isPackaged
+        ? [path.join(process.resourcesPath, 'dist', 'backend', 'index.js')]
+        : ['--import', 'tsx', path.join(rootDir, 'backend/index.ts')];
+    if (app.isPackaged) runtimeEnv.ELECTRON_RUN_AS_NODE = '1';
+
+    backendProcess = spawn(command, args, {
+        cwd: app.isPackaged ? process.resourcesPath : rootDir,
+        env: runtimeEnv,
+        stdio: ['ignore', 'pipe', 'pipe']
+    });
+    attachProcessLogs(backendProcess, 'backend');
+    pushLog('desktop', 'Backend baslatildi.');
+}
+
+async function startWorkerProcess() {
+    if (workerProcess && !workerProcess.killed) return;
+    const runtimeEnv = {
+        ...process.env,
+        TRACKIFY_DB_DIR: getRuntimeDataDir(),
+        TRACKIFY_SCHEMA_PATH: getRuntimeSchemaPath()
+    };
+    const command = app.isPackaged ? process.execPath : process.execPath;
+    const args = app.isPackaged
+        ? [path.join(process.resourcesPath, 'dist', 'workers', 'index.js')]
+        : ['--import', 'tsx', path.join(rootDir, 'workers/index.ts')];
+    if (app.isPackaged) runtimeEnv.ELECTRON_RUN_AS_NODE = '1';
+
+    workerProcess = spawn(command, args, {
+        cwd: app.isPackaged ? process.resourcesPath : rootDir,
+        env: runtimeEnv,
+        stdio: ['ignore', 'pipe', 'pipe']
+    });
+    attachProcessLogs(workerProcess, 'worker');
+    pushLog('desktop', 'Worker baslatildi.');
+}
+
+async function stopManagedServices() {
+    for (const proc of [workerProcess, backendProcess]) {
+        if (!proc || proc.killed) continue;
+        proc.kill('SIGTERM');
+    }
+}
+
+async function startManagedServices() {
+    if (desktopAccessState.blocked) {
+        pushLog('desktop', 'Servisler baslatilmadi: cihaz blocked.');
+        return;
+    }
+    await startBackendProcess();
+    await startWorkerProcess();
+}
+
+async function restartManagedServices() {
+    await stopManagedServices();
+    setTimeout(() => {
+        startManagedServices().catch((error) => pushLog('desktop', `Restart hatasi: ${error.message}`));
+    }, 800);
+}
+
+async function getBackendHealth() {
+    try {
+        return await fetchJson(`${LOCAL_API}/health`);
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
+}
+
+async function getRegistryHealth() {
+    try {
+        const data = await fetchJson(`${REGISTRY_API.replace(/\/api$/, '')}/health`);
+        return { ...data, checked_at: new Date().toISOString() };
+    } catch (error) {
+        return { ok: false, error: error.message, checked_at: new Date().toISOString() };
+    }
+}
+
+async function collectState() {
+    const prefs = getDesktopPrefs();
+    return {
+        desktopDevice: ensureDesktopDevice(),
+        access: desktopAccessState,
+        backendHealth: await getBackendHealth(),
+        registryHealth: await getRegistryHealth(),
+        extensionUpdate: extensionUpdateState,
+        preferences: {
+            ...prefs,
+            launchAtStartup: getLaunchAtStartup(),
+            platform: process.platform
+        },
+        backend: getProcessDescriptor('backend'),
+        worker: getProcessDescriptor('worker'),
+        logs
+    };
+}
+
+async function publishState() {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('desktop:state', await collectState());
+}
+
+function createTray() {
+    const iconPath = path.join(__dirname, '..', 'extension', 'icon.png');
+    const icon = nativeImage.createFromPath(iconPath).resize({ width: 18, height: 18 });
+    tray = new Tray(icon);
+    tray.setToolTip('Trackify Control Center');
+    tray.setContextMenu(Menu.buildFromTemplate([
+        { label: 'Masaustu Panelini Ac', click: () => mainWindow?.show() },
+        { label: 'Registry Panel URL', click: () => shell.openExternal(PANEL_URL) },
+        { type: 'separator' },
+        { label: 'Servisleri Baslat', click: () => startManagedServices() },
+        { label: 'Servisleri Durdur', click: () => stopManagedServices() },
+        { type: 'separator' },
+        {
+            label: 'Cikis', click: () => {
+                isQuitting = true;
+                app.quit();
+            }
+        }
+    ]));
+    tray.on('click', () => {
+        if (!mainWindow) return;
+        if (mainWindow.isVisible()) mainWindow.hide();
+        else mainWindow.show();
+    });
+}
+
+app.whenReady().then(() => {
+    const gotLock = app.requestSingleInstanceLock();
+    if (!gotLock) {
+        app.quit();
+        return;
+    }
+
+    createWindow();
+    createTray();
+    ensureDesktopDevice();
+    refreshRegistryAccess('register').catch(() => { });
+    checkExtensionUpdate().catch(() => { });
+    startManagedServices().catch((error) => pushLog('desktop', `Startup hatasi: ${error.message}`));
+    statusTimer = setInterval(() => {
+        refreshRegistryAccess('heartbeat').catch(() => { });
+        checkExtensionUpdate().catch(() => { });
+        publishState().catch(() => { });
+    }, 60 * 1000);
+    publishState().catch(() => { });
+});
+
+app.on('before-quit', () => {
+    isQuitting = true;
+    if (statusTimer) clearInterval(statusTimer);
+});
+
+app.on('window-all-closed', (event) => {
+    event.preventDefault();
+});
+
+app.on('second-instance', () => {
+    if (!mainWindow) return;
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
+});
+
+ipcMain.handle('desktop:get-state', async () => collectState());
+ipcMain.handle('desktop:start-services', async () => {
+    await refreshRegistryAccess('heartbeat');
+    await startManagedServices();
+    return collectState();
+});
+ipcMain.handle('desktop:stop-services', async () => {
+    await stopManagedServices();
+    return collectState();
+});
+ipcMain.handle('desktop:restart-services', async () => {
+    await restartManagedServices();
+    return collectState();
+});
+ipcMain.handle('desktop:check-extension-update', async () => {
+    await checkExtensionUpdate();
+    return collectState();
+});
+ipcMain.handle('desktop:download-extension-update', async () => {
+    await downloadExtensionUpdate();
+    return collectState();
+});
+ipcMain.handle('desktop:open-downloads-folder', async () => {
+    shell.openPath(app.getPath('downloads'));
+});
+ipcMain.handle('desktop:set-launch-at-startup', async (_event, enabled) => {
+    setLaunchAtStartup(Boolean(enabled));
+    return collectState();
+});
+ipcMain.handle('desktop:complete-onboarding', async () => {
+    updateDesktopPrefs({ onboardingCompleted: true });
+    return collectState();
+});
+ipcMain.handle('desktop:dismiss-install-guide', async () => {
+    updateDesktopPrefs({ installGuideDismissed: true });
+    return collectState();
+});
+ipcMain.handle('desktop:open-downloaded-extension', async () => {
+    const prefs = getDesktopPrefs();
+    if (prefs.lastDownloadedExtensionFile) {
+        shell.showItemInFolder(prefs.lastDownloadedExtensionFile);
+    }
+});
+ipcMain.handle('desktop:clear-logs', async () => {
+    logs = [];
+    return collectState();
+});
+ipcMain.handle('desktop:open-registry-window', async () => {
+    const win = new BrowserWindow({
+        width: 1420,
+        height: 920,
+        backgroundColor: '#0b1020',
+        autoHideMenuBar: true
+    });
+    await win.loadURL(PANEL_URL);
+});
+ipcMain.handle('desktop:open-registry-external', async () => shell.openExternal(PANEL_URL));
+ipcMain.handle('desktop:quit', async () => {
+    isQuitting = true;
+    await stopManagedServices();
+    app.quit();
+});

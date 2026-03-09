@@ -1,0 +1,95 @@
+{
+  "name": "ticarettakip",
+  "version": "1.0.0",
+  "description": "",
+  "main": "desktop/main.js",
+  "scripts": {
+    "build:services": "tsc --project tsconfig.json",
+    "build:desktop-assets": "node ./scripts/build-desktop-assets.mjs",
+    "build:extension-update": "node ./scripts/build-extension-update.mjs",
+    "pack:desktop": "npm run build:services && npm run build:desktop-assets && electron-builder --dir --publish never",
+    "dist:desktop": "npm run build:services && npm run build:desktop-assets && electron-builder --publish never",
+    "dist:desktop:mac": "npm run build:services && npm run build:desktop-assets && electron-builder --mac dmg --publish never",
+    "dist:desktop:win": "npm run build:services && npm run build:desktop-assets && electron-builder --win nsis --publish never",
+    "dev:backend": "nodemon --watch backend --watch database --watch workers --watch extractors -e ts --exec \"node --import tsx backend/index.ts\"",
+    "dev:registry": "nodemon --watch registry -e ts --exec \"node --import tsx registry/index.ts\"",
+    "desktop": "electron ./desktop/main.js",
+    "dev:worker": "node --import tsx workers/index.ts",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:worker\" \"npm run dev:frontend\"",
+    "start": "node dist/backend/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "axios": "^1.13.6",
+    "better-sqlite3": "^12.6.2",
+    "cheerio": "^1.2.0",
+    "cors": "^2.8.6",
+    "curlx": "^0.0.12",
+    "diff-match-patch": "^1.0.5",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "node-cron": "^4.2.1",
+    "patchright": "^1.58.2",
+    "playwright": "^1.58.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.19",
+    "@types/diff-match-patch": "^1.0.36",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.3.5",
+    "concurrently": "^9.2.1",
+    "electron": "^36.2.1",
+    "electron-builder": "^26.8.1",
+    "nodemon": "^3.1.14",
+    "png-to-ico": "^2.1.8",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "build": {
+    "appId": "com.harunhatirkirmaz.trackify",
+    "productName": "Trackify",
+    "directories": {
+      "buildResources": "desktop/build",
+      "output": "release"
+    },
+    "files": [
+      "desktop/**/*",
+      "extension/icon.png",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist",
+        "to": "dist"
+      },
+      {
+        "from": "database/schema.sql",
+        "to": "database/schema.sql"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        "dmg"
+      ],
+      "icon": "desktop/build/icon.icns"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "desktop/build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    }
+  }
+}

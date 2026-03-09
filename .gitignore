@@ -1,0 +1,53 @@
+node_modules/
+.agent/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Local databases
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+database/*.db
+database/*.sqlite
+database/*.sqlite3
+backend/*.db
+backend/*.sqlite
+backend/*.sqlite3
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+dist_test/
+release/
+desktop/build/
+registry/public/downloads/
+registry/public/updates/
+
+# OS / temp
+.DS_Store
+Thumbs.db
+tmp/
+temp/
+
+# Frontend / framework caches
+.next/
+.cache/
+frontend/.git.trackify-backup/
+
+# Runtime artifacts
+snapshots/
+*.zip
+*.dmg
+*.exe
+*.blockmap

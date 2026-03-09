@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Trackify Takip — Liste</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f0f1a;
+            --sidebar: #141420;
+            --card: #1a1a2e;
+            --card-hover: #1f1f38;
+            --border: rgba(255, 255, 255, 0.08);
+            --primary: #ef4444;
+            --green: #10b981;
+            --yellow: #f59e0b;
+            --text: #f1f5f9;
+            --muted: #64748b;
+            --radius: 12px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 220px;
+            background: var(--sidebar);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 20px 16px;
+            flex-shrink: 0;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 32px;
+        }
+
+        .logo img {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+        }
+
+        .logo-name {
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--primary);
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            color: var(--muted);
+            font-weight: 500;
+            margin-bottom: 4px;
+            transition: all 0.15s;
+            text-decoration: none;
+        }
+
+        .nav-item:hover,
+        .nav-item.active {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--text);
+        }
+
+        .nav-item.active {
+            color: var(--primary);
+        }
+
+        .sidebar-bottom {
+            margin-top: auto;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        .tg-link {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            color: var(--muted);
+            padding: 10px 12px;
+            border-radius: 8px;
+            transition: color 0.15s;
+        }
+
+        .tg-link:hover {
+            color: var(--text);
+        }
+
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .search-wrap {
+            flex: 1;
+            max-width: 600px;
+            position: relative;
+        }
+
+        .search-wrap input {
+            width: 100%;
+            background: var(--card);
+            border: 1px solid var(--border);
+            padding: 9px 14px 9px 38px;
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-wrap input:focus {
+            border-color: rgba(239, 68, 68, 0.5);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            opacity: 0.4;
+        }
+
+        .total-count {
+            color: var(--muted);
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        .refresh-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--muted);
+            font-size: 22px;
+            padding: 4px;
+            transition: color 0.2s, transform 0.3s;
+        }
+
+        .refresh-btn:hover {
+            color: var(--text);
+        }
+
+        .refresh-btn.spinning {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+
+        .tag {
+            padding: 4px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.15s;
+            user-select: none;
+        }
+
+        .tag:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            color: var(--text);
+        }
+
+        .tag.active {
+            background: #fff;
+            color: #000;
+            border-color: #fff;
+        }
+
+        .tag.domain-tag.active {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+
+        .list-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 24px 140px;
+        }
+
+        .list-area::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .list-area::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 10px;
+        }
+
+        .empty {
+            text-align: center;
+            padding: 80px 24px;
+            color: var(--muted);
+            font-size: 16px;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 12px;
+            transition: border-color 0.2s;
+            overflow: hidden;
+        }
+
+        .card:hover {
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .card.has-error {
+            border-color: rgba(239, 68, 68, 0.4);
+            background: rgba(239, 68, 68, 0.04);
+        }
+
+        .card.is-disabled {
+            opacity: 0.6;
+        }
+
+        .card-main {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px;
+        }
+
+        .card-left {
+            flex-shrink: 0;
+        }
+
+        .card-check {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: var(--primary);
+        }
+
+        .card-img {
+            width: 72px;
+            height: 72px;
+            border-radius: 8px;
+            object-fit: contain;
+            background: #fff;
+            flex-shrink: 0;
+        }
+
+        .card-body {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .card-domain {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 4px;
+        }
+
+        .card-title {
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: pointer;
+        }
+
+        .card-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+
+        .date-badge {
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            background: var(--green);
+            color: #fff;
+            white-space: nowrap;
+        }
+
+        .date-badge.old {
+            background: var(--yellow);
+        }
+
+        .date-badge.error {
+            background: var(--primary);
+        }
+
+        .price-val {
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--primary);
+        }
+
+        .card-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .card-actions-right {
+            margin-left: 4px;
+        }
+
+        .icon-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--muted);
+            font-size: 18px;
+            padding: 6px;
+            border-radius: 6px;
+            transition: all 0.15s;
+        }
+
+        .icon-btn:hover {
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .btn-refresh-card {
+            font-size: 22px;
+            font-weight: 900;
+        }
+
+        .btn-refresh-card.spinning {
+            animation: spin 1s linear infinite;
+        }
+
+        .btn-delete-confirm {
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            padding: 4px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .history-rows {
+            border-top: 1px solid var(--border);
+            padding: 8px 16px 12px;
+        }
+
+        .history-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            font-size: 13px;
+        }
+
+        .history-row:last-child {
+            border-bottom: none;
+        }
+
+        .h-date {
+            color: var(--muted);
+            width: 140px;
+            flex-shrink: 0;
+        }
+
+        .h-value {
+            font-weight: 600;
+        }
+
+        .h-value.changed {
+            color: var(--primary);
+        }
+
+        .card-settings {
+            border-top: 1px solid var(--border);
+            padding: 16px 20px;
+        }
+
+        .settings-section {}
+
+        .settings-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .settings-left,
+        .settings-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        .toggle {
+            position: relative;
+            width: 40px;
+            height: 22px;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            inset: 0;
+            background: #374151;
+            border-radius: 22px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .slider::before {
+            content: '';
+            position: absolute;
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background: #fff;
+            border-radius: 50%;
+            transition: 0.2s;
+        }
+
+        input:checked+.slider {
+            background: var(--green);
+        }
+
+        input:checked+.slider::before {
+            transform: translateX(18px);
+        }
+
+        .type-btns {
+            display: flex;
+            gap: 6px;
+        }
+
+        .type-btn {
+            padding: 4px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            font-size: 12px;
+            cursor: pointer;
+            background: none;
+            color: var(--muted);
+            transition: all 0.15s;
+        }
+
+        .type-btn.active {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+
+        .cond-btns {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+
+        .cond-btn {
+            padding: 3px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            font-size: 11px;
+            cursor: pointer;
+            background: none;
+            color: var(--muted);
+            transition: all 0.15s;
+        }
+
+        .cond-btn.active {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .adv-toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--muted);
+            transition: color 0.15s;
+        }
+
+        .adv-toggle:hover {
+            color: var(--text);
+        }
+
+        .bulk-bar {
+            position: fixed;
+            bottom: 0;
+            left: 220px;
+            right: 0;
+            background: #111827;
+            border-top: 1px solid var(--border);
+            padding: 12px 24px;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            z-index: 50;
+            box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        .bulk-info {
+            color: var(--muted);
+            font-size: 13px;
+            white-space: nowrap;
+            min-width: 110px;
+        }
+
+        .bulk-info b {
+            color: var(--text);
+        }
+
+        .bulk-btn {
+            padding: 6px 14px;
+            border-radius: 8px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+
+        .bulk-btn-green {
+            background: var(--green);
+            color: #fff;
+            border-color: var(--green);
+        }
+
+        .bulk-btn-red {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+
+        .bulk-btn-outline {
+            background: none;
+            border-color: var(--border);
+            color: var(--muted);
+        }
+
+        .bulk-btn-outline:hover {
+            color: var(--text);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .bulk-btn-gray {
+            background: #1f2937;
+            color: var(--text);
+            border-color: var(--border);
+        }
+
+        .ml-auto {
+            margin-left: auto;
+        }
+
+        .bulk-slider-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+        }
+
+        .bulk-slider-group span {
+            color: var(--muted);
+        }
+
+        .bulk-slider-group b {
+            color: var(--primary);
+        }
+
+        .bulk-slider-group input[type=range] {
+            width: 80px;
+            accent-color: var(--primary);
+        }
+    </style>
+</head>
+
+<body>
+
+    <aside class="sidebar">
+        <div class="logo">
+            <img src="icon.png" alt="PT">
+            <span class="logo-name">Trackify Takip</span>
+        </div>
+        <a class="nav-item active">
+            <span>📋</span>
+            <span data-i18n="nav.watchlist">Takip Listesi</span>
+        </a>
+        <a class="nav-item" href="settings.html">
+            <span>⚙️</span>
+            <span data-i18n="nav.settings">Ayarlar</span>
+        </a>
+        <a class="nav-item" href="settings.html#help">
+            <span>❓</span>
+            <span data-i18n="nav.help">Yardım</span>
+        </a>
+
+        <div class="sidebar-bottom">
+            <div class="tg-link" onclick="window.open('https://t.me/trackifytakipbot')">
+                <span>✈️</span>
+                <span data-i18n="nav.telegram">Telegram</span>
+            </div>
+        </div>
+    </aside>
+
+    <div class="main">
+        <div class="topbar">
+            <div class="search-wrap">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="search-input" data-i18n-placeholder="wl.search" placeholder="Search..."
+                    autocomplete="off">
+            </div>
+            <span class="total-count" id="total-count"></span>
+            <button class="refresh-btn" id="refresh-btn" title="Refresh">↻</button>
+        </div>
+
+        <div class="filter-bar" id="filter-bar">
+            <div class="tag active" data-filter="all" data-i18n="wl.filter.all">all</div>
+            <div class="tag" data-filter="on" data-i18n="wl.filter.on">on</div>
+            <div class="tag" data-filter="off" data-i18n="wl.filter.off">off</div>
+            <div class="tag" data-filter="errors" data-i18n="wl.filter.errors">errors</div>
+        </div>
+
+        <div class="list-area" id="product-list">
+            <div class="empty" data-i18n="wl.loading">Loading...</div>
+        </div>
+    </div>
+
+    <!-- Bulk Bar -->
+    <div class="bulk-bar" id="bulk-bar">
+        <span class="bulk-info"><span data-i18n="bulk.selected">Selected:</span> <b id="selected-count">0</b> / <b
+                id="total-bulk">0</b></span>
+        <button class="bulk-btn bulk-btn-green" id="bulk-enable" data-i18n="bulk.enable">enable</button>
+        <button class="bulk-btn bulk-btn-outline" id="bulk-disable" data-i18n="bulk.disable">disable</button>
+        <div class="bulk-slider-group">
+            <span data-i18n="bulk.interval">Tracking Interval:</span> <b id="bulk-interval-val">01:00</b>
+            <input type="range" id="bulk-interval" min="1" max="1440" value="60">
+        </div>
+        <button class="bulk-btn bulk-btn-gray" id="bulk-clear-history" data-i18n="bulk.clear_history">Clear
+            history</button>
+        <button class="bulk-btn bulk-btn-outline" id="bulk-never-stop" data-i18n="bulk.never_stop">never stop on
+            errors</button>
+        <button class="bulk-btn bulk-btn-outline" id="bulk-stop-errors" data-i18n="bulk.stop_errors">stop on
+            errors</button>
+        <div class="bulk-slider-group">
+            <span data-i18n="bulk.wait">Wait On Page:</span> <b id="bulk-wait-val">4s</b>
+            <input type="range" id="bulk-wait" min="1" max="30" value="4">
+        </div>
+        <button class="bulk-btn bulk-btn-gray ml-auto" id="bulk-export" data-i18n="bulk.export">export to file</button>
+        <button class="bulk-btn bulk-btn-red" id="bulk-delete-btn" data-i18n="bulk.delete">delete trackings</button>
+        <button class="bulk-btn bulk-btn-red" id="bulk-delete-all-btn" data-i18n="bulk.delete_all">delete all</button>
+        <button class="bulk-btn bulk-btn-green" id="bulk-select-all" data-i18n="bulk.select_all">select all</button>
+        <button class="bulk-btn bulk-btn-gray" id="bulk-close" data-i18n="bulk.close">close</button>
+    </div>
+
+    <script src="i18n.js"></script>
+    <script src="watchlist.js"></script>
+</body>
+
+</html>

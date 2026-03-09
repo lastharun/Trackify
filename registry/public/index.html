@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trackify Registry</title>
+    <style>
+        :root {
+            --bg: #0b1020;
+            --panel: #121a30;
+            --panel-soft: #19233f;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --line: rgba(255,255,255,0.08);
+            --green: #22c55e;
+            --red: #ef4444;
+            --blue: #60a5fa;
+            --yellow: #f59e0b;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: Inter, system-ui, sans-serif;
+            background: radial-gradient(circle at top, #172554, #0b1020 45%);
+            color: var(--text);
+        }
+        .shell {
+            max-width: 1320px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        .hero {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .hero h1 { margin: 0; font-size: 28px; }
+        .hero p { margin: 8px 0 0; color: var(--muted); }
+        .toolbar, .panel {
+            background: rgba(18,26,48,0.92);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            backdrop-filter: blur(14px);
+        }
+        .toolbar {
+            display: grid;
+            grid-template-columns: 1.4fr 180px 180px 120px;
+            gap: 12px;
+            padding: 16px;
+            margin-bottom: 18px;
+        }
+        input, select, button, textarea {
+            width: 100%;
+            border-radius: 12px;
+            border: 1px solid var(--line);
+            background: var(--panel-soft);
+            color: var(--text);
+            padding: 12px 14px;
+            font: inherit;
+        }
+        button {
+            cursor: pointer;
+            font-weight: 600;
+        }
+        button.primary { background: linear-gradient(135deg, #2563eb, #3b82f6); }
+        .layout {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 18px;
+        }
+        .panel {
+            padding: 18px;
+            min-height: 640px;
+        }
+        .panel h2 { margin: 0 0 14px; font-size: 16px; }
+        .device-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .device-card {
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 14px;
+            background: rgba(255,255,255,0.02);
+            cursor: pointer;
+        }
+        .device-card.active { outline: 2px solid rgba(96,165,250,0.4); }
+        .row {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            align-items: center;
+        }
+        .row + .row { margin-top: 8px; }
+        .title { font-weight: 700; }
+        .muted { color: var(--muted); font-size: 13px; }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 3px 10px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .badge.active { background: rgba(34,197,94,0.14); color: #86efac; }
+        .badge.perm_block { background: rgba(239,68,68,0.14); color: #fca5a5; }
+        .badge.temp_block { background: rgba(245,158,11,0.14); color: #fcd34d; }
+        .badge.license_expired { background: rgba(239,68,68,0.14); color: #fca5a5; }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .detail-box {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 12px;
+        }
+        .detail-box code {
+            display: block;
+            word-break: break-all;
+            margin-top: 6px;
+            color: #cbd5e1;
+        }
+        .actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 12px 0 18px;
+        }
+        .events {
+            max-height: 290px;
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .event {
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 12px;
+            background: rgba(255,255,255,0.02);
+        }
+        .empty {
+            color: var(--muted);
+            padding: 20px;
+            text-align: center;
+        }
+        .meta {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .status-bar {
+            margin-top: 12px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+        @media (max-width: 1024px) {
+            .layout, .toolbar, .detail-grid, .actions, .meta { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="hero">
+            <div>
+                <h1>Trackify Registry</h1>
+                <p>Cihazlar, lisans, blok ve son gorulme durumu</p>
+            </div>
+            <div class="muted" id="status-bar">Hazirlaniyor...</div>
+        </div>
+
+        <div class="toolbar">
+            <input id="search" placeholder="device_id, owner, cihaz adi ara">
+            <select id="status-filter">
+                <option value="">Tum durumlar</option>
+                <option value="online">Online son 24 saat</option>
+                <option value="active">Active</option>
+                <option value="temp_block">Temp block</option>
+                <option value="perm_block">Perm block</option>
+            </select>
+            <input id="admin-token" placeholder="Admin token">
+            <button id="refresh-btn" class="primary">Yenile</button>
+        </div>
+
+        <div class="layout">
+            <div class="panel">
+                <h2>Cihazlar</h2>
+                <div class="device-list" id="device-list"></div>
+            </div>
+            <div class="panel">
+                <h2>Detay</h2>
+                <div id="detail-view" class="empty">Soldan bir cihaz sec</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const state = {
+            devices: [],
+            selected: null
+        };
+
+        const els = {
+            search: document.getElementById('search'),
+            status: document.getElementById('status-filter'),
+            token: document.getElementById('admin-token'),
+            list: document.getElementById('device-list'),
+            detail: document.getElementById('detail-view'),
+            refresh: document.getElementById('refresh-btn'),
+            statusBar: document.getElementById('status-bar')
+        };
+
+        els.token.value = localStorage.getItem('registry_admin_token') || '';
+
+        function saveToken() {
+            localStorage.setItem('registry_admin_token', els.token.value.trim());
+        }
+
+        async function adminFetch(path, init = {}) {
+            saveToken();
+            const headers = new Headers(init.headers || {});
+            headers.set('x-registry-admin-token', els.token.value.trim());
+            if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json');
+            const res = await fetch(path, { ...init, headers });
+            if (!res.ok) throw new Error(await res.text());
+            return res.json();
+        }
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatDate(value) {
+            if (!value) return '—';
+            return new Date(String(value).replace(' ', 'T') + 'Z').toLocaleString('tr-TR');
+        }
+
+        function renderDevices() {
+            if (!state.devices.length) {
+                els.list.innerHTML = '<div class="empty">Kayitli cihaz yok</div>';
+                return;
+            }
+
+            els.list.innerHTML = state.devices.map(device => `
+                <div class="device-card ${state.selected?.device_id === device.device_id ? 'active' : ''}" data-id="${escapeHtml(device.device_id)}">
+                    <div class="row">
+                        <div class="title">${escapeHtml(device.owner_label || device.device_name || device.device_id)}</div>
+                        <span class="badge ${escapeHtml(device.status)}">${escapeHtml(device.status)}</span>
+                    </div>
+                    <div class="row">
+                        <div class="muted">${escapeHtml(device.device_id)}</div>
+                        <div class="muted">${escapeHtml(device.platform || '')}</div>
+                    </div>
+                    <div class="row">
+                        <div class="muted">Son gorulme: ${escapeHtml(formatDate(device.last_seen_at))}</div>
+                        <div class="muted">IP: ${escapeHtml(device.last_ip || '-')}</div>
+                    </div>
+                </div>
+            `).join('');
+
+            els.list.querySelectorAll('.device-card').forEach(card => {
+                card.addEventListener('click', () => openDevice(card.dataset.id));
+            });
+        }
+
+        function renderDetail(payload) {
+            const { device, events } = payload;
+            state.selected = device;
+            const isBlocked = ['perm_block', 'temp_block', 'license_expired'].includes(device.effective_status);
+
+            els.detail.innerHTML = `
+                <div class="detail-grid">
+                    <div class="detail-box"><div class="muted">Device ID</div><code>${escapeHtml(device.device_id)}</code></div>
+                    <div class="detail-box"><div class="muted">Durum</div><div class="badge ${escapeHtml(device.effective_status)}">${escapeHtml(device.effective_status)}</div></div>
+                    <div class="detail-box"><div class="muted">Son IP</div><code>${escapeHtml(device.last_ip || '-')}</code></div>
+                    <div class="detail-box"><div class="muted">Son gorulme</div><code>${escapeHtml(formatDate(device.last_seen_at))}</code></div>
+                </div>
+
+                <div class="meta">
+                    <input id="owner-input" placeholder="Owner label" value="${escapeHtml(device.owner_label || '')}">
+                    <input id="license-input" placeholder="Lisans bitis YYYY-MM-DD HH:MM:SS" value="${escapeHtml(device.license_expires_at || '')}">
+                </div>
+                <div class="meta">
+                    <input id="reason-input" placeholder="Sebep / not" value="${escapeHtml(device.reason || '')}">
+                    <button id="save-meta" class="primary">Kaydet</button>
+                </div>
+
+                <div class="actions">
+                    <button id="perm-block-btn">${isBlocked ? 'Kalici blok guncelle' : 'Kalici blokla'}</button>
+                    <button id="temp-block-btn">24 saat blokla</button>
+                    <button id="unblock-btn">Engeli kaldir</button>
+                    <button id="reload-btn">Detayi yenile</button>
+                </div>
+
+                <h2 style="margin:0 0 12px">Olaylar</h2>
+                <div class="events">
+                    ${(events || []).map(event => `
+                        <div class="event">
+                            <div class="row">
+                                <strong>${escapeHtml(event.event_type)}</strong>
+                                <span class="muted">${escapeHtml(formatDate(event.created_at))}</span>
+                            </div>
+                            <pre style="white-space:pre-wrap;word-break:break-word;color:#cbd5e1;margin:8px 0 0;font-size:12px">${escapeHtml(event.payload_json || '{}')}</pre>
+                        </div>
+                    `).join('') || '<div class="empty">Event yok</div>'}
+                </div>
+            `;
+
+            document.getElementById('save-meta').addEventListener('click', async () => {
+                await adminFetch(`/api/admin/devices/${encodeURIComponent(device.device_id)}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                        owner_label: document.getElementById('owner-input').value,
+                        license_expires_at: document.getElementById('license-input').value,
+                        reason: document.getElementById('reason-input').value
+                    })
+                });
+                await loadDevices();
+                await openDevice(device.device_id);
+            });
+
+            document.getElementById('perm-block-btn').addEventListener('click', async () => {
+                await adminFetch(`/api/admin/devices/${encodeURIComponent(device.device_id)}/block`, {
+                    method: 'POST',
+                    body: JSON.stringify({ mode: 'perm', reason: document.getElementById('reason-input').value || 'Admin panel block' })
+                });
+                await loadDevices();
+                await openDevice(device.device_id);
+            });
+
+            document.getElementById('temp-block-btn').addEventListener('click', async () => {
+                await adminFetch(`/api/admin/devices/${encodeURIComponent(device.device_id)}/block`, {
+                    method: 'POST',
+                    body: JSON.stringify({ mode: 'temp', duration: '24h', reason: document.getElementById('reason-input').value || 'Admin panel temp block' })
+                });
+                await loadDevices();
+                await openDevice(device.device_id);
+            });
+
+            document.getElementById('unblock-btn').addEventListener('click', async () => {
+                await adminFetch(`/api/admin/devices/${encodeURIComponent(device.device_id)}/unblock`, { method: 'POST' });
+                await loadDevices();
+                await openDevice(device.device_id);
+            });
+
+            document.getElementById('reload-btn').addEventListener('click', () => openDevice(device.device_id));
+        }
+
+        async function loadDevices() {
+            const params = new URLSearchParams();
+            if (els.search.value.trim()) params.set('search', els.search.value.trim());
+            if (els.status.value) params.set('status', els.status.value);
+            const data = await adminFetch(`/api/admin/devices?${params.toString()}`);
+            state.devices = data.devices || [];
+            renderDevices();
+            els.statusBar.textContent = `${state.devices.length} cihaz listelendi`;
+        }
+
+        async function openDevice(deviceId) {
+            const payload = await adminFetch(`/api/admin/devices/${encodeURIComponent(deviceId)}`);
+            renderDevices();
+            renderDetail(payload);
+        }
+
+        els.refresh.addEventListener('click', loadDevices);
+        els.search.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') loadDevices();
+        });
+        els.status.addEventListener('change', loadDevices);
+
+        loadDevices().catch((error) => {
+            els.statusBar.textContent = 'Panel baglantisi basarisiz';
+            els.list.innerHTML = `<div class="empty">${escapeHtml(String(error.message || error))}</div>`;
+        });
+    </script>
+</body>
+</html>

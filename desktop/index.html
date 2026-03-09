@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trackify Desktop</title>
+    <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+    <div id="onboarding-overlay" class="modal hidden">
+        <div class="modal-card">
+            <div class="eyebrow">Ilk Acilis</div>
+            <h2 class="modal-title">Trackify masaustu kurulumunu tamamla</h2>
+            <p class="modal-copy">Bu sihirbaz cihaz kaydi, yerel servisler ve Windows acilis ayarini tek seferde netlestirir.</p>
+
+            <div class="steps">
+                <div class="step-item">
+                    <div class="step-index">1</div>
+                    <div>
+                        <div class="step-title">Cihazin registry'ye baglandigini kontrol et</div>
+                        <div class="step-copy">Device ID olusturulduktan sonra bu cihaz panelde gorunur ve Telegram bildirimi gelir.</div>
+                    </div>
+                </div>
+                <div class="step-item">
+                    <div class="step-index">2</div>
+                    <div>
+                        <div class="step-title">Yerel servisleri bu pencereden yonet</div>
+                        <div class="step-copy">Backend ve worker terminal acmadan buradan baslatilip durdurulur.</div>
+                    </div>
+                </div>
+                <div class="step-item">
+                    <div class="step-index">3</div>
+                    <div>
+                        <div class="step-title">Windows acilisinda otomatik baslat</div>
+                        <div class="step-copy">Bu ayar yalnizca Windows'ta anlamlidir. Dilersen simdi acabilirsin.</div>
+                    </div>
+                </div>
+                <div class="step-item">
+                    <div class="step-index">4</div>
+                    <div>
+                        <div class="step-title">Uzanti guncellemesini masaustu uygulama ile indir</div>
+                        <div class="step-copy">Yeni ZIP geldikce bu uygulama bildirir; kurulum yine kullanici tarafinda manuel olur.</div>
+                    </div>
+                </div>
+            </div>
+
+            <label class="check-row">
+                <input id="onboarding-launch-checkbox" type="checkbox" />
+                <span>Windows acilisinda Trackify otomatik baslasin</span>
+            </label>
+
+            <div class="button-row">
+                <button id="onboarding-open-registry" class="ghost-btn">Registry panelini ac</button>
+                <button id="onboarding-finish" class="primary-btn">Kurulumu tamamla</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="brand">
+                <img src="../extension/icon.png" alt="Trackify" class="brand-icon" />
+                <div>
+                    <div class="eyebrow">Trackify Desktop</div>
+                    <h1>Control Center</h1>
+                </div>
+            </div>
+
+            <div class="sidebar-panel">
+                <div class="panel-label">Cihaz</div>
+                <div id="device-name" class="panel-title">Yukleniyor...</div>
+                <div id="device-id" class="panel-copy">Device ID: -</div>
+                <button id="copy-device-id" class="ghost-btn">Device ID kopyala</button>
+            </div>
+
+            <div class="sidebar-panel">
+                <div class="panel-label">Windows Baslangici</div>
+                <label class="check-row compact">
+                    <input id="launch-at-startup" type="checkbox" />
+                    <span>Windows acilisinda otomatik baslat</span>
+                </label>
+                <div id="launch-at-startup-hint" class="panel-copy">Bu ayar Windows icin aktif edilir.</div>
+            </div>
+
+            <div class="sidebar-panel">
+                <div class="panel-label">Kisayollar</div>
+                <button id="open-registry" class="nav-btn">Registry panelini ac</button>
+                <button id="open-registry-external" class="nav-btn">Tarayicida ac</button>
+                <button id="open-local-api" class="nav-btn">Local API health</button>
+            </div>
+
+            <div class="sidebar-note">
+                Pencereyi kuculttugunde uygulama tray'e gizlenir. Cikis sadece tray menusunden veya alttaki butondan yapilir.
+            </div>
+        </aside>
+
+        <main class="content">
+            <section class="hero">
+                <div>
+                    <div class="eyebrow">Masaustu Durumu</div>
+                    <h2>Terminal yerine tek merkezden takip et</h2>
+                    <p>Yerel servisler, merkezi registry ve cihaz durumu buradan izlenir.</p>
+                </div>
+                <div id="block-banner" class="block-banner hidden"></div>
+            </section>
+
+            <section class="status-grid">
+                <article class="status-card">
+                    <div class="card-label">Registry</div>
+                    <div id="registry-status" class="status-badge status-unknown">Kontrol ediliyor</div>
+                    <div id="registry-detail" class="card-detail">Merkezi erisim bekleniyor</div>
+                </article>
+
+                <article class="status-card">
+                    <div class="card-label">Backend</div>
+                    <div id="backend-status" class="status-badge status-unknown">Kontrol ediliyor</div>
+                    <div id="backend-detail" class="card-detail">http://127.0.0.1:3001</div>
+                </article>
+
+                <article class="status-card">
+                    <div class="card-label">Worker</div>
+                    <div id="worker-status" class="status-badge status-unknown">Bekleniyor</div>
+                    <div id="worker-detail" class="card-detail">Arka plan tarayici</div>
+                </article>
+
+                <article class="status-card">
+                    <div class="card-label">Lisans / Erisim</div>
+                    <div id="access-status" class="status-badge status-unknown">Yukleniyor</div>
+                    <div id="access-detail" class="card-detail">Registry cevabi bekleniyor</div>
+                </article>
+
+                <article class="status-card">
+                    <div class="card-label">Uzanti Guncelleme</div>
+                    <div id="extension-status" class="status-badge status-unknown">Kontrol ediliyor</div>
+                    <div id="extension-detail" class="card-detail">Yeni uzanti paketi bekleniyor</div>
+                </article>
+            </section>
+
+            <section class="control-row">
+                <div class="control-card">
+                    <div class="card-label">Servisler</div>
+                    <div class="button-row">
+                        <button id="start-services" class="primary-btn">Servisleri baslat</button>
+                        <button id="stop-services" class="ghost-btn">Servisleri durdur</button>
+                        <button id="restart-services" class="ghost-btn">Yeniden baslat</button>
+                    </div>
+                    <div id="services-hint" class="hint">Backend ve worker bu pencereden yonetilebilir.</div>
+                </div>
+
+                <div class="control-card">
+                    <div class="card-label">Durum Ozeti</div>
+                    <div id="summary-text" class="summary-text">Sistem kontrol ediliyor...</div>
+                </div>
+            </section>
+
+            <section class="control-row">
+                <div class="control-card">
+                    <div class="card-label">Uzanti Dagitimi</div>
+                    <div class="button-row">
+                        <button id="check-extension-update" class="primary-btn">Uzanti guncellemesini kontrol et</button>
+                        <button id="download-extension-update" class="ghost-btn">Yeni ZIP'i indir</button>
+                        <button id="open-downloads-folder" class="ghost-btn">Downloads klasorunu ac</button>
+                    </div>
+                    <div id="extension-download-hint" class="hint">Yeni paket varsa Downloads klasorune indirilir.</div>
+                </div>
+
+                <div class="control-card">
+                    <div class="card-label">Kurulum Notu</div>
+                    <div id="extension-install-hint" class="summary-text">Windows store disi Chrome uzantisi otomatik kurulmaz; masaustu uygulama sadece yeni paketi indirir ve kurulum adimini gosterir.</div>
+                </div>
+            </section>
+
+            <section id="install-guide-card" class="guide-card hidden">
+                <div class="guide-head">
+                    <div>
+                        <div class="card-label">Uzanti Kurulum Rehberi</div>
+                        <h3 class="guide-title">Indirilen ZIP'i Chrome'a yukle</h3>
+                    </div>
+                    <button id="dismiss-install-guide" class="ghost-btn">Kapat</button>
+                </div>
+                <div class="steps">
+                    <div class="step-item">
+                        <div class="step-index">1</div>
+                        <div>
+                            <div class="step-title">ZIP dosyasini bul</div>
+                            <div id="install-guide-file" class="step-copy">Downloads klasorune inen paketi ac.</div>
+                        </div>
+                    </div>
+                    <div class="step-item">
+                        <div class="step-index">2</div>
+                        <div>
+                            <div class="step-title">Chrome uzantilar ekranini ac</div>
+                            <div class="step-copy"><code>chrome://extensions</code> sayfasina git ve Gelistirici modu'nu ac.</div>
+                        </div>
+                    </div>
+                    <div class="step-item">
+                        <div class="step-index">3</div>
+                        <div>
+                            <div class="step-title">Paketi elle yenile</div>
+                            <div class="step-copy">Mevcut Trackify klasorunu yeni dosyalarla degistirip <b>Yenile</b> butonuna bas veya cikarttigin klasoru yeniden yukle.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="button-row">
+                    <button id="open-downloaded-extension" class="primary-btn">Indirilen dosyayi goster</button>
+                    <button id="open-chrome-extensions" class="ghost-btn">chrome://extensions ac</button>
+                </div>
+            </section>
+
+            <section class="logs-card">
+                <div class="logs-head">
+                    <div>
+                        <div class="card-label">Canli Log</div>
+                        <div class="card-detail">Son 200 satir tutulur.</div>
+                    </div>
+                    <div class="button-row">
+                        <button id="clear-logs" class="ghost-btn">Temizle</button>
+                        <button id="quit-app" class="danger-btn">Uygulamayi kapat</button>
+                    </div>
+                </div>
+                <pre id="logs" class="logs"></pre>
+            </section>
+        </main>
+    </div>
+
+    <script src="./renderer.js"></script>
+</body>
+</html>

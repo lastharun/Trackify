@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="tr" id="html-root">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Trackify Takip — Ayarlar</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f0f1a;
+            --card: #1a1a2e;
+            --border: rgba(255, 255, 255, 0.08);
+            --text: #f1f5f9;
+            --muted: #64748b;
+            --green: #10b981;
+            --primary: #ef4444;
+            --radius: 12px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 220px;
+            background: #141420;
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 20px 16px;
+            flex-shrink: 0;
+            height: 100vh;
+            position: sticky;
+            top: 0;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 32px;
+        }
+
+        .logo img {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+        }
+
+        .logo-name {
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--primary);
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            color: var(--muted);
+            font-weight: 500;
+            margin-bottom: 4px;
+            transition: all 0.15s;
+            text-decoration: none;
+        }
+
+        .nav-item.active {
+            color: var(--primary);
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .nav-item:hover {
+            color: var(--text);
+        }
+
+        .sidebar-bottom {
+            margin-top: auto;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        .tg-link {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            color: var(--muted);
+            padding: 10px 12px;
+            border-radius: 8px;
+            transition: color 0.15s;
+        }
+
+        .tg-link:hover {
+            color: var(--text);
+        }
+
+        .main {
+            flex: 1;
+            padding: 40px;
+            max-width: 680px;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .subtitle {
+            color: var(--muted);
+            margin-bottom: 36px;
+        }
+
+        .section {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+
+        .setting-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .setting-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .setting-name {
+            font-weight: 500;
+        }
+
+        .setting-desc {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        .toggle {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            inset: 0;
+            background: #374151;
+            border-radius: 24px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .slider::before {
+            content: '';
+            position: absolute;
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background: #fff;
+            border-radius: 50%;
+            transition: 0.2s;
+        }
+
+        input:checked+.slider {
+            background: var(--green);
+        }
+
+        input:checked+.slider::before {
+            transform: translateX(20px);
+        }
+
+        .select-row {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 6px 10px;
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .tg-box {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+            margin-top: 12px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        input[type=text] {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            width: 220px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type=text]:focus {
+            border-color: rgba(239, 68, 68, .5);
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            border: none;
+            transition: all 0.15s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #dc2626;
+        }
+
+        .btn-link {
+            background: none;
+            color: var(--primary);
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 0;
+            text-decoration: underline;
+        }
+
+        .qr-area {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-top: 8px;
+        }
+
+        .qr-img {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+        }
+
+        .toast-success {
+            background: var(--green);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .slider-row input[type=range] {
+            width: 200px;
+            accent-color: var(--primary);
+        }
+    </style>
+</head>
+
+<body>
+    <aside class="sidebar">
+        <div class="logo">
+            <img src="icon.png" alt="PT">
+            <span class="logo-name">Trackify Takip</span>
+        </div>
+        <a class="nav-item" href="watchlist.html">
+            <span>📋</span>
+            <span data-i18n="nav.watchlist">Takip Listesi</span>
+        </a>
+        <a class="nav-item active">
+            <span>⚙️</span>
+            <span data-i18n="nav.settings">Ayarlar</span>
+        </a>
+        <a class="nav-item" href="#help">
+            <span>❓</span>
+            <span data-i18n="nav.help">Yardım</span>
+        </a>
+
+        <div class="sidebar-bottom">
+            <div class="tg-link" onclick="window.open('https://t.me/trackifytakipbot')">
+                <span>✈️</span>
+                <span data-i18n="nav.telegram">Telegram</span>
+            </div>
+        </div>
+    </aside>
+
+    <div class="main">
+        <h1 data-i18n="set.title">Genel Ayarlar</h1>
+        <p class="subtitle" data-i18n="set.subtitle">Bu ayarlar tüm takiplerinize uygulanır.</p>
+
+        <!-- Genel -->
+        <div class="section">
+            <div class="section-title" data-i18n="set.general">Genel</div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-name" data-i18n="set.enable_parsing">Takibi Etkinleştir</div>
+                    <div class="setting-desc" data-i18n="set.enable_parsing_desc">Takipleri silmeden genel olarak
+                        duraklat.</div>
+                </div>
+                <label class="toggle"><input type="checkbox" id="enable-parsing" checked><span
+                        class="slider"></span></label>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-name" data-i18n="set.language">Dil</div>
+                </div>
+                <select class="select-row" id="language">
+                    <option value="tr">🇹🇷 Türkçe</option>
+                    <option value="en">🇬🇧 English</option>
+                </select>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-name" data-i18n="set.zero_price">Sıfır Fiyat Geçersiz</div>
+                    <div class="setting-desc" data-i18n="set.zero_price_desc">Çekilen değer 0 ise geç.</div>
+                </div>
+                <label class="toggle"><input type="checkbox" id="zero-price-invalid"><span
+                        class="slider"></span></label>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-name" data-i18n="set.keep_tab">Sekmeyi Açık Tut</div>
+                    <div class="setting-desc" data-i18n="set.keep_tab_desc">Arka planda sekme yeniden kullanılır.</div>
+                </div>
+                <label class="toggle"><input type="checkbox" id="keep-tab" checked><span class="slider"></span></label>
+            </div>
+        </div>
+
+        <!-- Bildirimler -->
+        <div class="section">
+            <div class="section-title" data-i18n="set.notifications">Bildirimler</div>
+            <div class="setting-row">
+                <div class="setting-name" data-i18n="set.telegram">Telegram</div>
+                <label class="toggle"><input type="checkbox" id="telegram-enabled" checked><span
+                        class="slider"></span></label>
+            </div>
+
+            <div class="tg-box">
+                <div class="input-row">
+                    <span class="setting-name" data-i18n="set.user_id">Kullanıcı ID:</span>
+                    <input type="text" id="telegram-id" placeholder="0123456789">
+                    <a class="btn-link" href="https://t.me/trackifytakipbot" target="_blank"
+                        data-i18n="set.get_here">buradan al</a>
+                </div>
+                <div class="qr-area">
+                    <div class="qr-img" style="background:transparent;overflow:hidden;"><img src="trackify_qr.png"
+                            style="width:100%;height:100%;object-fit:cover;" alt="QR Code"></div>
+                    <div>
+                        <div style="font-size:13px;color:var(--muted);margin-bottom:8px" data-i18n="set.or_qr">veya QR
+                            kod ile</div>
+                        <div style="color:var(--primary);font-weight:700">@TRACKIFYTAKIPBOT</div>
+                    </div>
+                </div>
+                <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
+                    <button class="btn btn-primary" id="save-telegram" data-i18n="set.save">Kaydet</button>
+                    <button class="btn-link" id="send-test" data-i18n="set.test">Test mesajı gönder</button>
+                </div>
+                <div class="setting-row" style="margin-top:12px">
+                    <div class="setting-name" data-i18n="set.send_errors">Hata Bildirimleri Gönder</div>
+                    <label class="toggle"><input type="checkbox" id="send-errors" checked><span
+                            class="slider"></span></label>
+                </div>
+                <div class="toast-success" id="test-toast">✅ Test mesajı gönderildi!</div>
+            </div>
+
+            <div class="setting-row" style="margin-top:4px">
+                <div class="setting-name" data-i18n="set.browser_notif">Tarayıcı Bildirimleri</div>
+                <label class="toggle"><input type="checkbox" id="browser-notif"><span class="slider"></span></label>
+            </div>
+        </div>
+
+        <!-- Varsayılan Ayarlar -->
+        <div class="section">
+            <div class="section-title" data-i18n="set.defaults">Yeni Takipler İçin Varsayılanlar</div>
+            <div class="setting-row">
+                <span class="setting-name">
+                    <span data-i18n="set.def_interval">Kontrol Aralığı:</span>
+                    <span id="iv-label" style="color:var(--primary);font-weight:700;margin-left:4px">01:00</span>
+                </span>
+                <div class="slider-row">
+                    <input type="range" id="default-interval" min="1" max="1440" value="60">
+                </div>
+            </div>
+            <div class="setting-row">
+                <span class="setting-name">
+                    <span data-i18n="set.def_discount">Min. İndirim:</span>
+                    <span id="discount-label" style="color:var(--primary);font-weight:700;margin-left:4px">5%</span>
+                </span>
+                <div class="slider-row">
+                    <input type="range" id="min-discount" min="1" max="100" value="5">
+                </div>
+            </div>
+            <div class="setting-row">
+                <span class="setting-name">
+                    <span data-i18n="set.def_wait">Sayfada Bekle:</span>
+                    <span id="wait-label" style="color:var(--primary);font-weight:700;margin-left:4px">4s</span>
+                </span>
+                <div class="slider-row">
+                    <input type="range" id="wait-on-page" min="1" max="30" value="4">
+                </div>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-name" data-i18n="set.never_stop">Hatalarda durma</div>
+                    <div class="setting-desc" data-i18n="set.never_stop_desc">Tekrarlayan hatalardan sonra bile takip
+                        etmeye devam et.</div>
+                </div>
+                <label class="toggle"><input type="checkbox" id="never-stop"><span class="slider"></span></label>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title" data-i18n="set.portability">İçe / Dışa Aktarım</div>
+            <div class="setting-desc" data-i18n="set.portability_desc" style="margin-bottom:16px">Tüm takipleri JSON olarak yedekle veya toplu geri yükle.</div>
+            <div class="tg-box">
+                <div class="input-row" style="justify-content:space-between;margin-bottom:16px">
+                    <div style="color:var(--muted);font-size:13px"><span data-i18n="set.device_id">Bu cihazın IDsi:</span> <code id="device-id-value">-</code></div>
+                </div>
+                <div class="input-row" style="justify-content:space-between">
+                    <div style="color:var(--muted);font-size:13px" data-i18n="set.import_hint">Trackify dışa aktarım JSON dosyalarını kabul eder.</div>
+                    <div style="display:flex;gap:10px;align-items:center">
+                        <button class="btn btn-primary" id="export-json" data-i18n="set.export_json">JSON dışa aktar</button>
+                        <button class="btn" id="import-json" data-i18n="set.import_json">JSON içe aktar</button>
+                        <input type="file" id="import-json-file" accept="application/json,.json" style="display:none">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- YARDIM BÖLÜMÜ -->
+        <div class="section" id="help">
+            <div class="section-title">❓ Yardım ve Nasıl Kullanılır?</div>
+
+            <div style="margin-bottom: 16px;">
+                <h3 style="margin-bottom: 8px; font-size: 14px; font-weight: 600;">Trackify Takip Nedir?</h3>
+                <p style="font-size: 13px; color: #cbd5e1; line-height: 1.5;">Trackify Takip, herhangi bir web
+                    sitesindeki (Amazon, Trendyol, Hepsiburada vb.) ürünlerin fiyatlarını, stok durumlarını veya
+                    ekrandaki metinleri sizin adınıza 7/24 takip eden akıllı bir uzantıdır. Değişiklik olduğu an
+                    Telegram'dan veya tarayıcı bildiriminden size anında haber verir.</p>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <h3 style="margin-bottom: 8px; font-size: 14px; font-weight: 600;">Kurulum ve Bildirimler (Telegram)
+                </h3>
+                <p style="font-size: 13px; color: #cbd5e1; line-height: 1.5;">Eş zamanlı bildirimleri telefonunuzdan
+                    almak için Telegram kurmanız çok önemlidir. Yukarıdaki <b>@TRACKIFYTAKIPBOT</b> botuna tıklayın,
+                    `/start` yazıp ilk menüden <code>Kullanıcı ID</code> bilginizi alıp üstteki kutucuğa yapıştırın ve
+                    "Kaydet" deyin. Artık tüm indirimler cebinizde!</p>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <h3 style="margin-bottom: 8px; font-size: 14px; font-weight: 600;">Nasıl Takip Eklerim?</h3>
+                <ul style="font-size: 13px; color: #cbd5e1; line-height: 1.5; padding-left: 20px;">
+                    <li><b>Tek Tıkla Ekleme:</b> Desteklenen bir sitedeyken eklentiyi açıp
+                        "Sayfayı Tara — Takip Edilebilir Alanlar" butonuna basın. Algılanan Fiyat veya diğer alanların
+                        (Stok, Satıcı vb.) yanındaki "Takip Et" butonlarına basarak hızlı takip başlatabilirsiniz.
+                        "Fiyat" yazanlar otomatik olarak <b>Fiyat CSS</b>'e, diğerleri <b>Yan CSS</b>'e kaydedilir.</li>
+                    <li><b>Manuel Seçici Araçları (Fiyat/Yan CSS):</b> Eklentide "Manuel CSS Seçici" menüsünü açın:
+                        <br>- <b>💰 Fiyat CSS:</b> Ürün fiyatını seçmek için kullanılır. Fiyat sayfada kaybolursa "FİYAT
+                        YOK" hatası alırsınız.
+                        <br>- <b>📌 Yan CSS:</b> Stok durumu, satıcı adı, kargo bilgisi gibi yan ürün verilerini takip
+                        etmek için kullanılır. İlgili veri her değiştiğinde (Örn: Stokta Yok) ayrı bildirim alırsınız.
+                    </li>
+                </ul>
+            </div>
+
+            <div>
+                <h3 style="margin-bottom: 8px; font-size: 14px; font-weight: 600;">Sıkça Sorulan Sorular</h3>
+                <p style="font-size: 13px; color: #cbd5e1; line-height: 1.5;"><b>Q: Arka planda bilgisayarım kapalıyken
+                        çalışır mı?</b><br>Trackify Takip, Chrome uzantısı olarak bilgisayarınız açık ve tarayıcınız
+                    arka planda aktifken döngüler halinde sayfaları gezer. Tamamen kapalıyken tarama yapmaz.
+                    <br><br><b>Q: Takiplerime yeni özellikler ekleyebilir miyim?</b><br>Evet! Takip listenizde
+                    (Watchlist) aynı ürün linkini koruyarak Manuel Seçici ile yeni fiyat kutularını da (örneğin Sepete
+                    Özel Fiyat) seçip eski takibinize bağlayabilirsiniz.
+                </p>
+            </div>
+        </div>
+    </div>
+    <script src="i18n.js"></script>
+    <script src="settings.js"></script>
+</body>
+
+</html>

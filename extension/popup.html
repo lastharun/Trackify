@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 340px;
+            background: #141420;
+            color: #f1f5f9;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .logo-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 4px;
+        }
+
+        .logo-img {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+        }
+
+        .logo-title {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .logo-sub {
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        .detected-box {
+            background: linear-gradient(135deg, rgba(239, 68, 68, .15), rgba(239, 68, 68, .05));
+            border: 1px solid rgba(239, 68, 68, .3);
+            border-radius: 10px;
+            padding: 12px 14px;
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .detected-label {
+            font-size: 11px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+
+        .detected-price {
+            font-size: 22px;
+            font-weight: 800;
+            color: #ef4444;
+        }
+
+        .detected-sel {
+            font-size: 11px;
+            color: #64748b;
+            font-family: monospace;
+            word-break: break-all;
+        }
+
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 13px 16px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #ef4444;
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #dc2626;
+        }
+
+        .btn-primary.pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, .4)
+            }
+
+            50% {
+                box-shadow: 0 0 0 8px rgba(239, 68, 68, 0)
+            }
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: #f1f5f9;
+            border: 1.5px solid rgba(255, 255, 255, .15);
+        }
+
+        .btn-outline:hover {
+            border-color: rgba(255, 255, 255, .35);
+            background: rgba(255, 255, 255, .05);
+        }
+
+        .btn-scan {
+            background: rgba(99, 102, 241, .15);
+            color: #a5b4fc;
+            border: 1.5px solid rgba(99, 102, 241, .3);
+        }
+
+        .btn-scan:hover {
+            background: rgba(99, 102, 241, .25);
+        }
+
+        .divider {
+            height: 1px;
+            background: rgba(255, 255, 255, .08);
+        }
+
+        .selector-section {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .selector-label {
+            font-size: 11px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+
+        .selector-input-row {
+            display: flex;
+            gap: 6px;
+        }
+
+        .selector-input {
+            flex: 1;
+            background: #1a1a2e;
+            border: 1px solid rgba(255, 255, 255, .12);
+            color: #f1f5f9;
+            padding: 8px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-family: monospace;
+            outline: none;
+            transition: border-color .2s;
+        }
+
+        .selector-input:focus {
+            border-color: rgba(239, 68, 68, .5);
+        }
+
+        .selector-input::placeholder {
+            color: #475569;
+        }
+
+        .btn-selector-track {
+            background: #ef4444;
+            color: #fff;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+            transition: background .2s;
+        }
+
+        .btn-selector-track:hover {
+            background: #dc2626;
+        }
+
+        .btn-selector-pick {
+            background: rgba(255, 255, 255, .08);
+            color: #94a3b8;
+            border: 1px solid rgba(255, 255, 255, .12);
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all .2s;
+            white-space: nowrap;
+        }
+
+        .btn-selector-pick:hover {
+            color: #f1f5f9;
+            border-color: rgba(255, 255, 255, .25);
+        }
+
+        .toggle-manual {
+            font-size: 12px;
+            color: #64748b;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: underline;
+            transition: color .2s;
+        }
+
+        .toggle-manual:hover {
+            color: #94a3b8;
+        }
+
+        .toast {
+            background: #10b981;
+            color: #fff;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 13px;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .toast a {
+            color: #fff;
+            font-weight: 700;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+
+        .status-msg {
+            font-size: 12px;
+            color: #94a3b8;
+            text-align: center;
+            min-height: 16px;
+        }
+
+        /* ─── Scan Panel ──────────────────────────────────── */
+        .scan-panel {
+            display: none;
+            flex-direction: column;
+            gap: 0;
+            background: #0f0f1a;
+            border: 1px solid rgba(99, 102, 241, .25);
+            border-radius: 10px;
+            overflow: hidden;
+            max-height: 380px;
+            overflow-y: auto;
+        }
+
+        .scan-panel::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .scan-panel::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, .3);
+            border-radius: 4px;
+        }
+
+        .scan-category {
+            padding: 6px 12px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: #6366f1;
+            background: rgba(99, 102, 241, .08);
+            border-bottom: 1px solid rgba(99, 102, 241, .1);
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .scan-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 8px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, .05);
+            transition: background .15s;
+        }
+
+        .scan-row:hover {
+            background: rgba(255, 255, 255, .04);
+        }
+
+        .scan-row-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .scan-row-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #cbd5e1;
+        }
+
+        .scan-row-value {
+            font-size: 10px;
+            color: #475569;
+            font-family: monospace;
+            word-break: break-all;
+            margin-top: 2px;
+            max-height: 32px;
+            overflow: hidden;
+        }
+
+        .scan-row-value.has-value {
+            color: #10b981;
+        }
+
+        .scan-row-sel {
+            font-size: 9px;
+            color: #1e293b;
+            margin-top: 2px;
+            font-family: monospace;
+            word-break: break-all;
+        }
+
+        .btn-track-scan {
+            flex-shrink: 0;
+            background: #ef4444;
+            color: #fff;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+            transition: background .15s;
+            align-self: center;
+        }
+
+        .btn-track-scan:hover {
+            background: #dc2626;
+        }
+
+        .scan-empty {
+            padding: 20px;
+            text-align: center;
+            color: #475569;
+            font-size: 12px;
+        }
+
+        .scan-loading {
+            padding: 16px;
+            text-align: center;
+            color: #6366f1;
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="logo-row">
+        <img src="icon.png" class="logo-img" alt="">
+        <div>
+            <div class="logo-title">Trackify Takip</div>
+            <div class="logo-sub" id="logo-sub">Herhangi bir sitede fiyat takibi</div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast">
+        <span id="toast-msg">Takip kaydedildi!</span>
+        <a id="view-list">TAKİP LİSTESİ</a>
+    </div>
+
+    <div class="detected-box" id="detected-box">
+        <span class="detected-label">Tespit Edilen Fiyat</span>
+        <span class="detected-price" id="detected-price">—</span>
+        <span class="detected-sel" id="detected-sel"></span>
+    </div>
+
+    <button class="btn btn-primary" id="btn-main">
+        <span id="btn-icon">⏳</span>
+        <span id="btn-label">Algılanıyor...</span>
+    </button>
+
+    <!-- 🔍 Scan Button -->
+    <button class="btn btn-scan" id="btn-scan" style="padding:10px 16px;font-size:13px">
+        🔍 &nbsp; Sayfayı Tara — Takip Edilebilir Alanlar
+    </button>
+
+    <!-- Scan Results Panel -->
+    <div class="scan-panel" id="scan-panel">
+        <div class="scan-loading" id="scan-loading">🔍 Taranıyor...</div>
+    </div>
+
+
+    <!-- MANUEL CSS SEÇİCİ (Birleşik) -->
+    <div class="selector-section" id="selector-section" style="gap:10px;display:none;flex-direction:column">
+        <div style="display:flex;flex-direction:column;gap:6px">
+            <span class="selector-label" style="color:var(--primary)">🎯 TAKİP EDİLEN ALANLAR (CSS)</span>
+            <div style="font-size:11px;color:#64748b">
+                <b>İpucu:</b> Birden fazla alanı takip etmek için virgülle ayırın. İlk alan ana değer olarak görünüp
+                bildirilir.
+            </div>
+            <div class="selector-input-row">
+                <input type="text" class="selector-input" id="selector-unified-input"
+                    placeholder=".prc-dsc, .stock-status, .seller-name" style="border-color:var(--primary)">
+                <button class="btn-selector-pick" id="btn-pick-price" title="Sayfadan element seç"
+                    style="background:rgba(239,68,68,0.15);color:#ef4444">🎯</button>
+            </div>
+        </div>
+
+        <button class="btn btn-primary" id="btn-selector-track" style="font-size:13px;padding:10px">
+            ✅ Seçili Alanları Takip Et
+        </button>
+    </div>
+
+    <div class="toggle-manual" id="toggle-manual">⚙️ Manuel CSS seçici</div>
+
+
+    <div class="status-msg" id="status-msg"></div>
+
+    <div class="divider"></div>
+
+    <button class="btn btn-outline" id="btn-list">
+        ☰ &nbsp; Takip Listesi
+    </button>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ticarettakip.backend</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/node</string>
+        <string>/Users/harun/ticarettakip/node_modules/.bin/tsx</string>
+        <string>/Users/harun/ticarettakip/backend/index.ts</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/harun/ticarettakip</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/harun/ticarettakip/logs/backend.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/harun/ticarettakip/logs/backend.error.log</string>
+</dict>
+</plist>
