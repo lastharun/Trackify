@@ -78,7 +78,7 @@ function renderState(state) {
     const backendDetail = state.backendHealth?.ok
         ? `Backend saglikli. Son kontrol: ${formatTime(state.backendHealth.time)}`
         : (state.backend?.running
-            ? 'Backend processi acik, health cevabi bekleniyor...'
+            ? `Backend processi acik ama health alinamadi${state.backendHealth?.error ? `: ${state.backendHealth.error}` : '...' }`
             : (state.backend?.lastError
                 || (state.backend?.lastExitCode !== null && state.backend?.lastExitCode !== undefined
                     ? `Son cikis kodu: ${state.backend.lastExitCode}`
@@ -123,7 +123,7 @@ function renderState(state) {
         banner.textContent = '';
     }
 
-    const logs = Array.isArray(state.logs) ? state.logs.join('\n') : [];
+    const logs = Array.isArray(state.logs) ? state.logs : [];
     $('logs').textContent = logs.join('\n');
 
     const summary = [];
