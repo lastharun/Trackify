@@ -54,6 +54,13 @@ function mapExtensionUpdate(update) {
     return { label: 'Bekliyor', className: 'status-unknown' };
 }
 
+function mapDesktopUpdate(update) {
+    if (update?.available) return { label: 'Güncelleme Var', className: 'status-warning' };
+    if (update?.version) return { label: 'Güncel', className: 'status-active' };
+    if (update?.error) return { label: 'Kontrol Edilemedi', className: 'status-error' };
+    return { label: 'Bekliyor', className: 'status-unknown' };
+}
+
 function toggleHidden(id, hidden) {
     const el = $(id);
     if (!el) return;
@@ -106,6 +113,18 @@ function renderState(state) {
                 : (state.extensionUpdate?.error || 'Manifest bekleniyor')))
     setStatus('extension-status', 'extension-detail', extensionState, extensionDetail);
 
+    const desktopUpdateState = mapDesktopUpdate(state.desktopUpdate);
+    const desktopUpdateDetail = state.desktopUpdate?.available
+        ? `Yeni masaüstü paketi ${state.desktopUpdate.version} hazır. Build: ${String(state.desktopUpdate.build_id || '-').slice(0, 8)}`
+        : (state.desktopUpdate?.version
+            ? `Kurulu sürüm ${state.appInfo?.version || '-'}. Sunucudaki sürüm ${state.desktopUpdate.version}.`
+            : (state.desktopUpdate?.error || 'Masaüstü güncelleme manifesti bekleniyor'));
+    setStatus('desktop-update-status', 'desktop-update-detail', desktopUpdateState, desktopUpdateDetail);
+
+    $('desktop-update-hint').textContent = state.desktopUpdate?.downloadedFile
+        ? `Son indirilen kurulum: ${state.desktopUpdate.downloadedFile}`
+        : 'Yeni Windows kurulum dosyası bulunduğunda Downloads klasörüne indirilebilir.';
+
     $('extension-download-hint').textContent = state.extensionUpdate?.downloadedFile
         ? `Son indirilen dosya: ${state.extensionUpdate.downloadedFile}`
         : 'Buton son yüklenen ZIP paketini Downloads klasörüne indirir.';
@@ -130,6 +149,11 @@ function renderState(state) {
     summary.push(state.backendHealth?.ok ? 'Backend hazır.' : (state.backend?.running ? 'Backend başlıyor.' : 'Backend kapalı.'));
     summary.push(state.worker?.running ? 'Worker çalışıyor.' : 'Worker bekliyor.');
     summary.push(state.access?.blocked ? 'Cihaz şu an engelli.' : 'Cihaz aktif durumda.');
+    summary.push(
+        state.desktopUpdate?.available
+            ? `Masaüstü için ${state.desktopUpdate.version} güncellemesi hazır.`
+            : 'Masaüstü sürümü kontrol edildi.'
+    );
     summary.push(
         state.extensionUpdate?.available
             ? `Uzantı ${state.extensionUpdate.version} indirilmeyi bekliyor.`
@@ -172,6 +196,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('check-extension-update').addEventListener('click', async () => {
         await window.trackifyDesktop.checkExtensionUpdate();
         await refreshState();
+    });
+    $('check-desktop-update').addEventListener('click', async () => {
+        await window.trackifyDesktop.checkDesktopUpdate();
+        await refreshState();
+    });
+    $('download-desktop-update').addEventListener('click', async () => {
+        await window.trackifyDesktop.downloadDesktopUpdate();
+        await refreshState();
+    });
+    $('install-desktop-update').addEventListener('click', async () => {
+        await window.trackifyDesktop.installDesktopUpdate();
+    });
+    $('open-downloaded-desktop-installer').addEventListener('click', async () => {
+        await window.trackifyDesktop.openDownloadedDesktopInstaller();
     });
     $('download-extension-update').addEventListener('click', async () => {
         await window.trackifyDesktop.downloadExtensionUpdate();

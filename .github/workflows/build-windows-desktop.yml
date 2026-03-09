@@ -12,6 +12,8 @@ on:
       - "database/**"
       - "extractors/**"
       - "notifications/**"
+      - "scripts/build-desktop-assets.mjs"
+      - "scripts/build-desktop-update.mjs"
       - "package.json"
       - "package-lock.json"
       - "tsconfig.json"
@@ -45,4 +47,5 @@ jobs:
             release/*.exe
             release/*.yml
             release/latest*.yml
+            desktop/build-meta.json
           if-no-files-found: error

@@ -23,6 +23,7 @@ const publicDir = path.resolve(__dirname, 'public');
 const downloadsDir = path.join(publicDir, 'downloads');
 const updatesDir = path.join(publicDir, 'updates');
 const extensionUpdateManifestPath = path.join(updatesDir, 'extension.json');
+const desktopUpdateManifestPath = path.join(updatesDir, 'desktop.json');
 
 let lastTelegramUpdateId = 0;
 
@@ -437,6 +438,15 @@ app.get('/api/updates/extension', (_req, res) => {
         res.json(manifest);
     } catch {
         res.status(404).json({ error: 'extension_update_not_found' });
+    }
+});
+
+app.get('/api/updates/desktop', (_req, res) => {
+    try {
+        const manifest = JSON.parse(fs.readFileSync(desktopUpdateManifestPath, 'utf8'));
+        res.json(manifest);
+    } catch {
+        res.status(404).json({ error: 'desktop_update_not_found' });
     }
 });
 

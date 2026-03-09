@@ -131,6 +131,12 @@
                     <div id="extension-status" class="status-badge status-unknown">Kontrol ediliyor</div>
                     <div id="extension-detail" class="card-detail">Yeni uzanti paketi bekleniyor</div>
                 </article>
+
+                <article class="status-card">
+                    <div class="card-label">Masaüstü Güncelleme</div>
+                    <div id="desktop-update-status" class="status-badge status-unknown">Kontrol ediliyor</div>
+                    <div id="desktop-update-detail" class="card-detail">Yeni masaüstü paketi bekleniyor</div>
+                </article>
             </section>
 
             <section class="control-row">
@@ -145,6 +151,26 @@
                 <div class="control-card">
                     <div class="card-label">Durum Özeti</div>
                     <div id="summary-text" class="summary-text">Sistem kontrol ediliyor...</div>
+                </div>
+            </section>
+
+            <section class="control-row">
+                <div class="control-card">
+                    <div class="card-label">Masaüstü Güncellemesi</div>
+                    <div class="button-row">
+                        <button id="check-desktop-update" class="primary-btn">Masaüstü güncellemesini kontrol et</button>
+                        <button id="download-desktop-update" class="ghost-btn">Kurulum dosyasını indir</button>
+                        <button id="install-desktop-update" class="ghost-btn">Kurulumu başlat</button>
+                    </div>
+                    <div id="desktop-update-hint" class="hint">Yeni Windows kurulum dosyası bulunduğunda Downloads klasörüne indirilebilir.</div>
+                </div>
+
+                <div class="control-card">
+                    <div class="card-label">İndirilen Kurulum</div>
+                    <div class="button-row">
+                        <button id="open-downloaded-desktop-installer" class="ghost-btn">Kurulum dosyasını göster</button>
+                    </div>
+                    <div class="summary-text">Güncelleme indirildiğinde kurulum dosyası Explorer içinde gösterilir ve buradan tekrar açılabilir.</div>
                 </div>
             </section>
 

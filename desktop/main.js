@@ -12,6 +12,7 @@ const MAX_LOG_LINES = 200;
 const STATUS_POLL_MS = 15 * 1000;
 const STARTUP_REFRESH_DELAYS = [1500, 5000];
 const rootDir = path.join(__dirname, '..');
+const buildMetaFile = path.join(__dirname, 'build-meta.json');
 
 let mainWindow = null;
 let tray = null;
@@ -23,9 +24,32 @@ let logs = [];
 let desktopAccessState = { status: 'unknown', blocked: false, reason: null, blocked_until: null };
 let desktopDevice = null;
 let extensionUpdateState = { version: null, available: false, checked_at: null, downloadedFile: null };
+let desktopUpdateState = { version: null, build_id: null, available: false, checked_at: null, downloadedFile: null };
 
 function getRegistryBaseUrl() {
     return REGISTRY_API.replace(/\/api$/, '');
+}
+
+function getBuildMeta() {
+    try {
+        return JSON.parse(fs.readFileSync(buildMetaFile, 'utf8'));
+    } catch {
+        return {
+            product: 'trackify-desktop',
+            version: app.getVersion(),
+            build_id: 'unknown',
+            built_at: null
+        };
+    }
+}
+
+function getDesktopVersionState() {
+    const meta = getBuildMeta();
+    return {
+        version: String(meta.version || app.getVersion() || '0.0.0'),
+        build_id: String(meta.build_id || 'unknown'),
+        built_at: meta.built_at || null
+    };
 }
 
 function getExtensionFallbackState() {
@@ -37,6 +61,15 @@ function getExtensionFallbackState() {
         latest_download_url: '/downloads/Trackify-Extension-latest.zip',
         install_hint: 'Manifest olmasa bile son yüklenen ZIP indirilebilir. Kurulum kullanıcı tarafında chrome://extensions ekranından manuel yapılır.'
     };
+}
+
+function shouldOfferDesktopUpdate(manifest) {
+    const current = getDesktopVersionState();
+    if (!manifest) return false;
+    const versionDiff = compareVersions(manifest.version, current.version);
+    if (versionDiff > 0) return true;
+    if (versionDiff < 0) return false;
+    return Boolean(manifest.build_id && current.build_id && manifest.build_id !== current.build_id);
 }
 
 function scheduleStateRefresh(delays = STARTUP_REFRESH_DELAYS) {
@@ -172,7 +205,9 @@ function getDesktopPrefs() {
         launchAtStartup: Boolean(prefs.launchAtStartup),
         installGuideDismissed: Boolean(prefs.installGuideDismissed),
         lastNotifiedExtensionVersion: prefs.lastNotifiedExtensionVersion || null,
-        lastDownloadedExtensionFile: prefs.lastDownloadedExtensionFile || null
+        lastDownloadedExtensionFile: prefs.lastDownloadedExtensionFile || null,
+        lastNotifiedDesktopBuildId: prefs.lastNotifiedDesktopBuildId || null,
+        lastDownloadedDesktopInstaller: prefs.lastDownloadedDesktopInstaller || null
     };
 }
 
@@ -361,6 +396,42 @@ async function checkExtensionUpdate() {
     }
 }
 
+async function checkDesktopUpdate() {
+    try {
+        const manifest = await fetchJson(`${REGISTRY_API}/updates/desktop`);
+        const prefs = readDesktopPrefs();
+        const current = getDesktopVersionState();
+        const available = shouldOfferDesktopUpdate(manifest);
+
+        desktopUpdateState = {
+            ...manifest,
+            current_version: current.version,
+            current_build_id: current.build_id,
+            available,
+            checked_at: new Date().toISOString(),
+            downloadedFile: prefs.lastDownloadedDesktopInstaller || null
+        };
+
+        if (available && prefs.lastNotifiedDesktopBuildId !== manifest.build_id) {
+            new Notification({
+                title: 'Yeni Trackify masaüstü sürümü var',
+                body: `Yeni masaüstü paketi ${manifest.version} indirilmeye hazır.`
+            }).show();
+            writeDesktopPrefs({
+                ...prefs,
+                lastNotifiedDesktopBuildId: manifest.build_id || `${manifest.version || 'unknown'}`
+            });
+        }
+    } catch (error) {
+        desktopUpdateState = {
+            ...desktopUpdateState,
+            error: error.message,
+            checked_at: new Date().toISOString()
+        };
+        pushLog('desktop-update', `Manifest kontrol hatası: ${error.message}`);
+    }
+}
+
 async function downloadExtensionUpdate() {
     await checkExtensionUpdate();
     if (!extensionUpdateState?.download_url) {
@@ -395,6 +466,58 @@ async function downloadExtensionUpdate() {
 
     shell.showItemInFolder(targetPath);
     return targetPath;
+}
+
+async function downloadDesktopUpdate() {
+    await checkDesktopUpdate();
+    const relativeUrl = desktopUpdateState?.download_url || desktopUpdateState?.latest_download_url;
+    if (!relativeUrl) {
+        throw new Error('Masaüstü güncelleme paketi bulunamadı.');
+    }
+
+    const downloadUrl = new URL(relativeUrl, `${getRegistryBaseUrl()}/`).toString();
+    const targetPath = path.join(
+        app.getPath('downloads'),
+        desktopUpdateState.file_name || `Trackify-Desktop-${desktopUpdateState.version || 'latest'}.exe`
+    );
+    const res = await fetch(downloadUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const arrayBuffer = await res.arrayBuffer();
+    fs.writeFileSync(targetPath, Buffer.from(arrayBuffer));
+
+    const prefs = readDesktopPrefs();
+    writeDesktopPrefs({
+        ...prefs,
+        lastDownloadedDesktopInstaller: targetPath
+    });
+    desktopUpdateState.downloadedFile = targetPath;
+
+    new Notification({
+        title: 'Masaüstü güncellemesi indirildi',
+        body: `Kurulum dosyası hazır: ${path.basename(targetPath)}`
+    }).show();
+
+    shell.showItemInFolder(targetPath);
+    return targetPath;
+}
+
+async function installDesktopUpdate() {
+    const prefs = getDesktopPrefs();
+    const installerPath = desktopUpdateState?.downloadedFile || prefs.lastDownloadedDesktopInstaller;
+    if (!installerPath || !fs.existsSync(installerPath)) {
+        throw new Error('Önce masaüstü güncellemesini indir.');
+    }
+
+    spawn(installerPath, [], {
+        detached: true,
+        stdio: 'ignore'
+    }).unref();
+
+    pushLog('desktop-update', `Kurulum başlatıldı: ${path.basename(installerPath)}`);
+    isQuitting = true;
+    await stopManagedServices();
+    app.quit();
+    return installerPath;
 }
 
 function getProcessDescriptor(kind) {
@@ -513,11 +636,13 @@ async function getRegistryHealth() {
 async function collectState() {
     const prefs = getDesktopPrefs();
     return {
+        appInfo: getDesktopVersionState(),
         desktopDevice: ensureDesktopDevice(),
         access: desktopAccessState,
         backendHealth: await getBackendHealth(),
         registryHealth: await getRegistryHealth(),
         extensionUpdate: extensionUpdateState,
+        desktopUpdate: desktopUpdateState,
         preferences: {
             ...prefs,
             launchAtStartup: getLaunchAtStartup(),
@@ -569,10 +694,12 @@ app.whenReady().then(() => {
     ensureDesktopDevice();
     refreshRegistryAccess('register').catch(() => { });
     checkExtensionUpdate().catch(() => { });
+    checkDesktopUpdate().catch(() => { });
     startManagedServices().catch((error) => pushLog('desktop', `Başlangıç hatası: ${error.message}`));
     statusTimer = setInterval(() => {
         refreshRegistryAccess('heartbeat').catch(() => { });
         checkExtensionUpdate().catch(() => { });
+        checkDesktopUpdate().catch(() => { });
         publishState().catch(() => { });
     }, STATUS_POLL_MS);
     publishState().catch(() => { });
@@ -611,6 +738,18 @@ ipcMain.handle('desktop:download-extension-update', async () => {
 ipcMain.handle('desktop:open-downloads-folder', async () => {
     shell.openPath(app.getPath('downloads'));
 });
+ipcMain.handle('desktop:check-desktop-update', async () => {
+    await checkDesktopUpdate();
+    return collectState();
+});
+ipcMain.handle('desktop:download-desktop-update', async () => {
+    await downloadDesktopUpdate();
+    return collectState();
+});
+ipcMain.handle('desktop:install-desktop-update', async () => {
+    await installDesktopUpdate();
+    return collectState();
+});
 ipcMain.handle('desktop:set-launch-at-startup', async (_event, enabled) => {
     setLaunchAtStartup(Boolean(enabled));
     return collectState();
@@ -627,6 +766,12 @@ ipcMain.handle('desktop:open-downloaded-extension', async () => {
     const prefs = getDesktopPrefs();
     if (prefs.lastDownloadedExtensionFile) {
         shell.showItemInFolder(prefs.lastDownloadedExtensionFile);
+    }
+});
+ipcMain.handle('desktop:open-downloaded-desktop-installer', async () => {
+    const prefs = getDesktopPrefs();
+    if (prefs.lastDownloadedDesktopInstaller) {
+        shell.showItemInFolder(prefs.lastDownloadedDesktopInstaller);
     }
 });
 ipcMain.handle('desktop:clear-logs', async () => {
