@@ -4,9 +4,9 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const DEV_ID = process.env.TELEGRAM_DEV_ID || CHAT_ID;
+const BOT_TOKEN = process.env.TELEGRAM_ADMIN_BOT_TOKEN;
+const CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID;
+const DEV_ID = process.env.TELEGRAM_ADMIN_DEV_ID || CHAT_ID;
 
 let lastUpdateId = 0;
 let notificationsEnabled = true;
@@ -313,7 +313,7 @@ async function handleCommand(text: string, fromId: string) {
 
 export async function startRemoteControl() {
     if (!BOT_TOKEN || !CHAT_ID) {
-        console.error('Telegram bot credentials missing.');
+        console.log('Admin Telegram remote control disabled.');
         return;
     }
 

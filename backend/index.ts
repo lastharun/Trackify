@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { db, initDb } from '../database/index';
 import { formatTemplate, sendTelegramMessage } from '../notifications/telegram';
+import { getUserTelegramConfig } from '../notifications/index';
 import { isNotificationsEnabled, startRemoteControl } from './remote_control';
 
 dotenv.config();
@@ -15,6 +16,12 @@ app.use(express.json());
 initDb();
 
 startRemoteControl();
+
+async function notifyUserTelegram(message: string) {
+    const { token, chatId, enabled } = getUserTelegramConfig();
+    if (!enabled || !token || !chatId) return false;
+    return sendTelegramMessage(token, chatId, message);
+}
 
 function splitSelectorList(...values: Array<string | null | undefined>) {
     const seen = new Set<string>();
@@ -213,7 +220,7 @@ app.get('/api/products', (req, res) => {
     }
 });
 
-app.post('/api/products', (req, res) => {
+app.post('/api/products', async (req, res) => {
     let { url, domain, title, trackingInterval, selector_price, selector_secondary, selector_title, selector_image, last_image_url, value_type, wait_on_page, never_stop } = req.body;
     if (!url || !domain) {
         return res.status(400).json({ error: 'URL and domain are required' });
@@ -239,6 +246,13 @@ app.post('/api/products', (req, res) => {
             'INSERT INTO products (url, domain, title, tracking_interval, selector_price, selector_secondary, selector_title, selector_image, last_image_url, value_type, wait_on_page, never_stop, last_value, last_secondary_value, created_at, updated_at, last_viewed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)'
         );
         const info = stmt.run(url, domain, title || null, trackingInterval, selector_price || null, selector_secondary || null, selector_title || null, selector_image || null, last_image_url || null, value_type || 'string', wait_on_page, never_stop, '', '');
+        await notifyUserTelegram(
+            `🆕 <b>Yeni takip kaydedildi</b>\n\n` +
+            `📦 <b>Ürün:</b> ${title || url}\n` +
+            `🏷️ <b>Domain:</b> ${domain}\n` +
+            `⏱️ <b>Kontrol Aralığı:</b> ${trackingInterval} dk\n` +
+            `🔗 <a href="${url}">Ürüne Git</a>`
+        ).catch(() => { });
         res.status(201).json({ id: info.lastInsertRowid });
     } catch (err: any) {
         if (err.message.includes('UNIQUE constraint failed')) {
@@ -310,6 +324,13 @@ app.post('/api/products', (req, res) => {
                 // Also ensure existing ones are normalized if they were NULL
                 const query = `UPDATE products SET ${updateQueries.join(', ')}, last_value = COALESCE(last_value, ''), last_secondary_value = COALESCE(last_secondary_value, ''), updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
                 db.prepare(query).run(...updateParams, existing.id);
+                await notifyUserTelegram(
+                    `ℹ️ <b>Mevcut takip güncellendi</b>\n\n` +
+                    `📦 <b>Ürün:</b> ${title || url}\n` +
+                    `🏷️ <b>Domain:</b> ${domain}\n` +
+                    `⏱️ <b>Kontrol Aralığı:</b> ${parseInt(s.default_interval || '10')} dk\n` +
+                    `🔗 <a href="${url}">Ürüne Git</a>`
+                ).catch(() => { });
                 return res.status(200).json({ id: existing.id, appended });
             }
 
@@ -510,12 +531,7 @@ app.post('/api/extension/sync', async (req, res) => {
 
                 // Send Telegram if enabled
                 if (product.notification_telegram) {
-                    const settings = db.prepare('SELECT key, value FROM settings').all() as any[];
-                    const s = Object.fromEntries(settings.map((r: any) => [r.key, r.value]));
-                    if (s.telegram_enabled === '1' && s.telegram_bot_token && s.telegram_chat_id) {
-                        const { sendTelegramMessage } = await import('../notifications/telegram');
-                        await sendTelegramMessage(s.telegram_bot_token, s.telegram_chat_id, msg).catch(() => { });
-                    }
+                    await notifyUserTelegram(msg).catch(() => { });
                 }
             } else if (data.value !== undefined) {
                 // Unified primary selector tracking — price extraction is optional.
@@ -609,11 +625,7 @@ app.post('/api/extension/sync', async (req, res) => {
                 notifications.push(msg);
 
                 if (product.notification_telegram) {
-                    const settings = db.prepare('SELECT key, value FROM settings').all() as any[];
-                    const s = Object.fromEntries(settings.map((r: any) => [r.key, r.value]));
-                    if (s.telegram_enabled === '1' && s.telegram_bot_token && s.telegram_chat_id) {
-                        await sendTelegramMessage(s.telegram_bot_token, s.telegram_chat_id, msg).catch(() => { });
-                    }
+                    await notifyUserTelegram(msg).catch(() => { });
                 }
             }
 
