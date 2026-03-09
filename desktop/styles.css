@@ -312,6 +312,43 @@ body {
     margin-top: 16px;
 }
 
+.progress-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+    margin-top: 16px;
+}
+
+.progress-row progress {
+    width: 100%;
+    height: 12px;
+    appearance: none;
+}
+
+.progress-row progress::-webkit-progress-bar {
+    background: rgba(148, 163, 184, 0.16);
+    border-radius: 999px;
+}
+
+.progress-row progress::-webkit-progress-value {
+    background: linear-gradient(135deg, #2563eb, #38bdf8);
+    border-radius: 999px;
+}
+
+.progress-row progress::-moz-progress-bar {
+    background: linear-gradient(135deg, #2563eb, #38bdf8);
+    border-radius: 999px;
+}
+
+.progress-label {
+    min-width: 54px;
+    color: #dbeafe;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: right;
+}
+
 button {
     border: none;
     border-radius: 16px;

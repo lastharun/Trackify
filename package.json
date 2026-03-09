@@ -79,6 +79,7 @@
       "target": [
         "nsis"
       ],
+      "artifactName": "Trackify-Setup-${version}.${ext}",
       "icon": "desktop/build/icon.ico"
     },
     "nsis": {

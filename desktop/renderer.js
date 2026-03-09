@@ -55,6 +55,8 @@ function mapExtensionUpdate(update) {
 }
 
 function mapDesktopUpdate(update) {
+    if (update?.installing) return { label: 'Güncelleniyor', className: 'status-warning' };
+    if (update?.downloading) return { label: 'İndiriliyor', className: 'status-warning' };
     if (update?.available) return { label: 'Güncelleme Var', className: 'status-warning' };
     if (update?.version) return { label: 'Güncel', className: 'status-active' };
     if (update?.error) return { label: 'Kontrol Edilemedi', className: 'status-error' };
@@ -114,16 +116,26 @@ function renderState(state) {
     setStatus('extension-status', 'extension-detail', extensionState, extensionDetail);
 
     const desktopUpdateState = mapDesktopUpdate(state.desktopUpdate);
-    const desktopUpdateDetail = state.desktopUpdate?.available
+    const desktopUpdateDetail = state.desktopUpdate?.installing
+        ? 'Sessiz güncelleme başlatıldı. Uygulama kapanıp aynı klasöre güncel sürüm kurulacak.'
+        : state.desktopUpdate?.downloading
+            ? `Kurulum dosyası indiriliyor: %${state.desktopUpdate.downloadProgress || 0}`
+        : state.desktopUpdate?.available
         ? `Yeni masaüstü paketi ${state.desktopUpdate.version} hazır. Build: ${String(state.desktopUpdate.build_id || '-').slice(0, 8)}`
         : (state.desktopUpdate?.version
             ? `Kurulu sürüm ${state.appInfo?.version || '-'}. Sunucudaki sürüm ${state.desktopUpdate.version}.`
             : (state.desktopUpdate?.error || 'Masaüstü güncelleme manifesti bekleniyor'));
     setStatus('desktop-update-status', 'desktop-update-detail', desktopUpdateState, desktopUpdateDetail);
 
-    $('desktop-update-hint').textContent = state.desktopUpdate?.downloadedFile
+    $('desktop-update-hint').textContent = state.desktopUpdate?.downloading
+        ? `İndirilen: ${state.desktopUpdate.downloadBytes || 0} / ${state.desktopUpdate.downloadTotalBytes || 0} bayt`
+        : state.desktopUpdate?.downloadedFile
         ? `Son indirilen kurulum: ${state.desktopUpdate.downloadedFile}`
         : 'Yeni Windows kurulum dosyası bulunduğunda Downloads klasörüne indirilebilir.';
+    $('desktop-update-progress').value = Number(state.desktopUpdate?.downloadProgress || 0);
+    $('desktop-update-progress-label').textContent = state.desktopUpdate?.downloading
+        ? `%${state.desktopUpdate.downloadProgress || 0}`
+        : (state.desktopUpdate?.downloadedFile ? 'Hazır' : 'Bekliyor');
 
     $('extension-download-hint').textContent = state.extensionUpdate?.downloadedFile
         ? `Son indirilen dosya: ${state.extensionUpdate.downloadedFile}`

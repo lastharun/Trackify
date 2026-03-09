@@ -24,7 +24,18 @@ let logs = [];
 let desktopAccessState = { status: 'unknown', blocked: false, reason: null, blocked_until: null };
 let desktopDevice = null;
 let extensionUpdateState = { version: null, available: false, checked_at: null, downloadedFile: null };
-let desktopUpdateState = { version: null, build_id: null, available: false, checked_at: null, downloadedFile: null };
+let desktopUpdateState = {
+    version: null,
+    build_id: null,
+    available: false,
+    checked_at: null,
+    downloadedFile: null,
+    downloading: false,
+    downloadProgress: 0,
+    downloadBytes: 0,
+    downloadTotalBytes: 0,
+    installing: false
+};
 
 function getRegistryBaseUrl() {
     return REGISTRY_API.replace(/\/api$/, '');
@@ -409,7 +420,13 @@ async function checkDesktopUpdate() {
             current_build_id: current.build_id,
             available,
             checked_at: new Date().toISOString(),
-            downloadedFile: prefs.lastDownloadedDesktopInstaller || null
+            downloadedFile: prefs.lastDownloadedDesktopInstaller || null,
+            downloading: false,
+            downloadProgress: 0,
+            downloadBytes: 0,
+            downloadTotalBytes: 0,
+            installing: false,
+            error: null
         };
 
         if (available && prefs.lastNotifiedDesktopBuildId !== manifest.build_id) {
@@ -482,15 +499,62 @@ async function downloadDesktopUpdate() {
     );
     const res = await fetch(downloadUrl);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const arrayBuffer = await res.arrayBuffer();
-    fs.writeFileSync(targetPath, Buffer.from(arrayBuffer));
+    const totalBytes = Number(res.headers.get('content-length') || 0);
+    desktopUpdateState = {
+        ...desktopUpdateState,
+        downloading: true,
+        downloadProgress: 0,
+        downloadBytes: 0,
+        downloadTotalBytes: totalBytes,
+        error: null
+    };
+    await publishState();
+
+    const fileStream = fs.createWriteStream(targetPath);
+    const reader = res.body?.getReader();
+    let downloadedBytes = 0;
+
+    if (!reader) {
+        const arrayBuffer = await res.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        fs.writeFileSync(targetPath, buffer);
+        downloadedBytes = buffer.length;
+    } else {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = Buffer.from(value);
+            downloadedBytes += chunk.length;
+            fileStream.write(chunk);
+            desktopUpdateState = {
+                ...desktopUpdateState,
+                downloading: true,
+                downloadBytes: downloadedBytes,
+                downloadTotalBytes: totalBytes,
+                downloadProgress: totalBytes > 0 ? Math.min(100, Math.round((downloadedBytes / totalBytes) * 100)) : 0
+            };
+            await publishState();
+        }
+        await new Promise((resolve, reject) => {
+            fileStream.on('finish', resolve);
+            fileStream.on('error', reject);
+            fileStream.end();
+        });
+    }
 
     const prefs = readDesktopPrefs();
     writeDesktopPrefs({
         ...prefs,
         lastDownloadedDesktopInstaller: targetPath
     });
-    desktopUpdateState.downloadedFile = targetPath;
+    desktopUpdateState = {
+        ...desktopUpdateState,
+        downloadedFile: targetPath,
+        downloading: false,
+        downloadBytes: downloadedBytes || totalBytes,
+        downloadTotalBytes: totalBytes,
+        downloadProgress: 100
+    };
 
     new Notification({
         title: 'Masaüstü güncellemesi indirildi',
@@ -508,12 +572,25 @@ async function installDesktopUpdate() {
         throw new Error('Önce masaüstü güncellemesini indir.');
     }
 
-    spawn(installerPath, [], {
+    const installDir = app.isPackaged ? path.dirname(process.execPath) : null;
+    const installerArgs = ['/S'];
+    if (installDir && process.platform === 'win32') {
+        installerArgs.push(`/D=${installDir}`);
+    }
+
+    desktopUpdateState = {
+        ...desktopUpdateState,
+        installing: true,
+        error: null
+    };
+    await publishState();
+
+    spawn(installerPath, installerArgs, {
         detached: true,
         stdio: 'ignore'
     }).unref();
 
-    pushLog('desktop-update', `Kurulum başlatıldı: ${path.basename(installerPath)}`);
+    pushLog('desktop-update', `Sessiz güncelleme başlatıldı: ${path.basename(installerPath)}`);
     isQuitting = true;
     await stopManagedServices();
     app.quit();
