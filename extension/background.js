@@ -26,6 +26,22 @@ const ACCESS_REFRESH_MINUTES = 1;
 let deviceIdCache = null;
 let accessStateCache = { status: 'active', blocked: false, reason: null, blocked_until: null };
 
+function parseSelectorList(value) {
+    if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean);
+    if (!value) return [];
+    const raw = String(value).trim();
+    if (!raw) return [];
+    if (raw.startsWith('[')) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                return parsed.map((item) => String(item || '').trim()).filter(Boolean);
+            }
+        } catch { }
+    }
+    return raw.split(/\r?\n|,/).map((part) => part.trim()).filter(Boolean);
+}
+
 function normalizeExtractedText(value) {
     return String(value ?? '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
 }
@@ -42,6 +58,29 @@ async function ensureDeviceId() {
         deviceIdCache = stored[DEVICE_ID_KEY];
         return deviceIdCache;
     }
+
+    try {
+        const manifest = chrome.runtime.getManifest();
+        const res = await fetch(`${API}/device/bootstrap`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                device_name: `Trackify ${navigator.platform || 'unknown'}`,
+                platform: navigator.platform || 'unknown',
+                user_agent: navigator.userAgent || '',
+                extension_version: manifest.version || 'unknown'
+            })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (data?.device_id) {
+                deviceIdCache = data.device_id;
+                await chrome.storage.local.set({ [DEVICE_ID_KEY]: deviceIdCache });
+                return deviceIdCache;
+            }
+        }
+    } catch { }
+
     deviceIdCache = generateDeviceId();
     await chrome.storage.local.set({ [DEVICE_ID_KEY]: deviceIdCache });
     return deviceIdCache;
@@ -344,7 +383,7 @@ async function processTask(task) {
         let secondaryValue = null;
         let secondaryItems = [];
         if (task.selector_secondary) {
-            const secs = task.selector_secondary.split(',').map(s => s.trim()).filter(Boolean);
+            const secs = parseSelectorList(task.selector_secondary);
             const secondaryTexts = [];
             for (const sel of secs) {
                 await waitForSelectorText(tabId, sel, 4000);
@@ -500,6 +539,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     body: JSON.stringify({
                         url, domain,
                         title: data.title_value || title,
+                        selectors: data.selectors || [data.selector_price, data.selector_secondary].filter(Boolean),
                         selector_price: data.selector_price || null,
                         selector_secondary: data.selector_secondary || null,
                         selector_title: data.selector_title,

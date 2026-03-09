@@ -32,6 +32,23 @@ export function initDb() {
         const schema = fs.readFileSync(schemaPath, 'utf8');
         db.exec(schema);
 
+        const parseSelectorValue = (value: any) => {
+            if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean);
+            if (!value) return [];
+            const raw = String(value).trim();
+            if (!raw) return [];
+            if (raw.startsWith('[')) {
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed)) {
+                        return parsed.map((item) => String(item || '').trim()).filter(Boolean);
+                    }
+                } catch { }
+            }
+            return raw.split(/\r?\n|,/).map((part) => part.trim()).filter(Boolean);
+        };
+        const serializeSecondarySelectors = (selectors: string[]) => selectors.length ? JSON.stringify(selectors) : null;
+
         // ── Runtime migrations (safe to run every time) ──────────────────────────
         const migrations = [
             `ALTER TABLE products ADD COLUMN selector_secondary TEXT`,
@@ -71,9 +88,7 @@ export function initDb() {
             const seen = new Set<string>();
             const selectors: string[] = [];
             for (const value of values) {
-                if (!value) continue;
-                for (const part of value.split(',')) {
-                    const selector = part.trim();
+                for (const selector of parseSelectorValue(value)) {
                     if (!selector || seen.has(selector)) continue;
                     seen.add(selector);
                     selectors.push(selector);
@@ -91,7 +106,7 @@ export function initDb() {
         for (const row of rows) {
             const selectors = normalize(row.selector_price, row.selector_secondary);
             const selectorPrice = selectors[0] || null;
-            const selectorSecondary = selectors.slice(1).join(', ') || null;
+            const selectorSecondary = serializeSecondarySelectors(selectors.slice(1));
 
             if (selectorPrice !== row.selector_price || selectorSecondary !== row.selector_secondary) {
                 updateSelectors.run(selectorPrice, selectorSecondary, row.id);
@@ -120,10 +135,7 @@ export function initDb() {
 
         for (const row of changeRows) {
             const primary = (row.selector_price || '').trim();
-            const secondarySelectors = (row.selector_secondary || '')
-                .split(',')
-                .map((part) => part.trim())
-                .filter(Boolean);
+            const secondarySelectors = parseSelectorValue(row.selector_secondary);
             const allSelectors = [primary, ...secondarySelectors].filter(Boolean);
 
             let selector = (row.field_changed || '').trim();
@@ -170,10 +182,7 @@ export function initDb() {
         `);
 
         for (const product of productsWithSecondaryMap) {
-            const secondarySelectors = (product.selector_secondary || '')
-                .split(',')
-                .map((part) => part.trim())
-                .filter(Boolean);
+            const secondarySelectors = parseSelectorValue(product.selector_secondary);
             if (!secondarySelectors.length) continue;
 
             let secondaryMap: Record<string, string> = {};

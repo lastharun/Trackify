@@ -8,6 +8,7 @@ const path = require('path');
 const PANEL_URL = process.env.TRACKIFY_PANEL_URL || 'https://registry.harunhatirkirmaz.com/panel/';
 const LOCAL_API = process.env.TRACKIFY_LOCAL_API || 'http://127.0.0.1:3001';
 const REGISTRY_API = process.env.TRACKIFY_REGISTRY_API || 'https://registry.harunhatirkirmaz.com/api';
+const DEFAULT_USER_TELEGRAM_BOT_TOKEN = process.env.TRACKIFY_SHARED_TELEGRAM_BOT_TOKEN || '8343838308:AAHPdqmy4iGGsqM-RLqZCAZ3R1MiYikAjUw';
 const MAX_LOG_LINES = 200;
 const STATUS_POLL_MS = 15 * 1000;
 const STARTUP_REFRESH_DELAYS = [1500, 5000];
@@ -628,7 +629,8 @@ async function startBackendProcess() {
     const runtimeEnv = {
         ...process.env,
         TRACKIFY_DB_DIR: getRuntimeDataDir(),
-        TRACKIFY_SCHEMA_PATH: getRuntimeSchemaPath()
+        TRACKIFY_SCHEMA_PATH: getRuntimeSchemaPath(),
+        TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || DEFAULT_USER_TELEGRAM_BOT_TOKEN
     };
     const command = app.isPackaged ? process.execPath : process.execPath;
     const args = app.isPackaged
@@ -651,7 +653,8 @@ async function startWorkerProcess() {
     const runtimeEnv = {
         ...process.env,
         TRACKIFY_DB_DIR: getRuntimeDataDir(),
-        TRACKIFY_SCHEMA_PATH: getRuntimeSchemaPath()
+        TRACKIFY_SCHEMA_PATH: getRuntimeSchemaPath(),
+        TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || DEFAULT_USER_TELEGRAM_BOT_TOKEN
     };
     const command = app.isPackaged ? process.execPath : process.execPath;
     const args = app.isPackaged

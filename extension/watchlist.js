@@ -14,6 +14,28 @@ window.fetch = async (input, init = {}) => {
     return nativeFetch(input, { ...init, headers });
 };
 
+function parseSelectorList(value) {
+    if (Array.isArray(value)) {
+        return value.map((item) => String(item || '').trim()).filter(Boolean);
+    }
+
+    const raw = String(value || '').trim();
+    if (!raw) return [];
+
+    if (raw.startsWith('[')) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                return parsed.map((item) => String(item || '').trim()).filter(Boolean);
+            }
+        } catch {
+            // Fall through to legacy parsing.
+        }
+    }
+
+    return raw.split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
+}
+
 function renderBlockedOverlay(state) {
     if (!state?.blocked) return;
     if (document.getElementById('trackify-blocked-overlay')) return;
@@ -274,8 +296,9 @@ function handleCardChange(e) {
                 const currentVal = input.value.trim();
                 const newVal = currentVal ? `${currentVal}, ${sel}` : sel;
                 input.value = newVal;
-                const parts = newVal.split(',').map(s => s.trim()).filter(Boolean);
+                const parts = parseSelectorList(newVal);
                 patchProduct(id, {
+                    selectors: parts,
                     selector_price: parts[0] || null,
                     selector_secondary: parts.slice(1).join(', ') || null
                 });
@@ -313,8 +336,9 @@ function handleCardChange(e) {
         if (['tracking_interval', 'wait_on_page'].includes(e.target.dataset.field)) val = parseInt(val);
 
         if (e.target.dataset.field === 'unified_selectors') {
-            const parts = val.split(',').map(s => s.trim()).filter(Boolean);
+            const parts = parseSelectorList(val);
             patchProduct(id, {
+                selectors: parts,
                 selector_price: parts[0] || null,
                 selector_secondary: parts.slice(1).join(', ') || null
             });
@@ -552,9 +576,9 @@ function buildCard(p) {
             <div class="settings-row" style="margin-bottom:8px">
                 <div style="flex:1;display:flex;flex-direction:column;gap:6px">
                     <div style="font-size:11px;color:#94a3b8;line-height:1.2;margin-bottom:4px">
-                        <b>İpucu:</b> Birden fazla alanı takip etmek için virgülle ayırın. İlk alan kartın ön yüzünde görünür.
+                        <b>İpucu:</b> Birden fazla alanı virgülle veya alt alta ekleyebilirsin. İlk alan kartın ön yüzünde görünür.
                     </div>
-                    <input type="text" value="${escHTML([p.selector_price, p.selector_secondary].filter(Boolean).join(', '))}" 
+                    <input type="text" value="${escHTML([p.selector_price, ...parseSelectorList(p.selector_secondary)].filter(Boolean).join(', '))}" 
                         data-field="unified_selectors" 
                         placeholder="#price, .stock-status, .seller-name"
                         style="width:100%;background:rgba(0,0,0,0.2);border:1px solid var(--primary);border-radius:6px;padding:8px 10px;color:#fff;font-family:monospace;font-size:12px;outline:none">
@@ -661,10 +685,7 @@ async function toggleHistory(id) {
 
         const fallbackSelectorMeta = (row) => {
             const primary = String(product?.selector_price || '').trim();
-            const secondarySelectors = String(product?.selector_secondary || '')
-                .split(',')
-                .map(s => s.trim())
-                .filter(Boolean);
+            const secondarySelectors = parseSelectorList(product?.selector_secondary);
             const allSelectors = [primary, ...secondarySelectors].filter(Boolean);
             const selector = String(row.field_changed || '').trim();
             const cssIndex = selector ? allSelectors.indexOf(selector) + 1 : 0;

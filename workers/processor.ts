@@ -8,12 +8,25 @@ import { notifyChange } from '../notifications/index';
 
 const dmp = new DiffMatchPatch();
 
+function parseSelectorValue(value: any) {
+    if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean);
+    if (!value) return [];
+    const raw = String(value).trim();
+    if (!raw) return [];
+    if (raw.startsWith('[')) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                return parsed.map((item) => String(item || '').trim()).filter(Boolean);
+            }
+        } catch { }
+    }
+    return raw.split(/\r?\n|,/).map((part) => part.trim()).filter(Boolean);
+}
+
 function getSelectorDetails(product: any, selector: string | null, role: 'primary' | 'secondary') {
     const primary = String(product.selector_price || '').trim();
-    const secondarySelectors = String(product.selector_secondary || '')
-        .split(',')
-        .map((part: string) => part.trim())
-        .filter(Boolean);
+    const secondarySelectors = parseSelectorValue(product.selector_secondary);
     const allSelectors = [primary, ...secondarySelectors].filter(Boolean);
     const resolvedSelector = String(selector || '').trim() || (role === 'primary' ? primary : '');
     const overallIndex = resolvedSelector ? allSelectors.indexOf(resolvedSelector) + 1 : 0;

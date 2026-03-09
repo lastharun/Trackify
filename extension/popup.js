@@ -65,6 +65,13 @@ function inferValueType(value, fallback = 'string') {
     return stripped ? 'string' : 'price';
 }
 
+function splitSelectorInput(value) {
+    return String(value || '')
+        .split(/\r?\n|,/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
     await enforceAccessState();
@@ -337,7 +344,7 @@ async function trackWithSelector() {
     }
     if (!currentTab) { setStatus('⚠️ Geçerli bir ürün sayfası yok'); return; }
 
-    const parts = unifiedInput.split(',').map(s => s.trim()).filter(Boolean);
+    const parts = splitSelectorInput(unifiedInput);
     const primarySelector = parts[0];
     const secondarySelector = parts.slice(1).join(', ') || null;
 
@@ -362,6 +369,7 @@ async function trackWithSelector() {
                 url: currentTab.url,
                 domain: new URL(currentTab.url).hostname.replace('www.', '').split('.')[0],
                 title: currentTab.title,
+                selectors: parts,
                 selector_price: primarySelector,
                 selector_secondary: secondarySelector,
                 value_type: valueType

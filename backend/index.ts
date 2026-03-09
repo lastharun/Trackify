@@ -5,6 +5,8 @@ import { db, initDb } from '../database/index';
 import { formatTemplate, sendTelegramMessage } from '../notifications/telegram';
 import { getUserTelegramConfig } from '../notifications/index';
 import { isNotificationsEnabled, startRemoteControl } from './remote_control';
+import crypto from 'crypto';
+import os from 'os';
 
 dotenv.config();
 
@@ -23,14 +25,30 @@ async function notifyUserTelegram(message: string) {
     return sendTelegramMessage(token, chatId, message);
 }
 
-function splitSelectorList(...values: Array<string | null | undefined>) {
+function parseSelectorValue(value: any) {
+    if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean);
+    if (!value) return [];
+    const raw = String(value).trim();
+    if (!raw) return [];
+
+    if (raw.startsWith('[')) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                return parsed.map((item) => String(item || '').trim()).filter(Boolean);
+            }
+        } catch { }
+    }
+
+    return raw.split(/\r?\n|,/).map((part) => part.trim()).filter(Boolean);
+}
+
+function splitSelectorList(...values: Array<any>) {
     const seen = new Set<string>();
     const selectors: string[] = [];
 
     for (const value of values) {
-        if (!value) continue;
-        for (const part of String(value).split(',')) {
-            const selector = part.trim();
+        for (const selector of parseSelectorValue(value)) {
             if (!selector || seen.has(selector)) continue;
             seen.add(selector);
             selectors.push(selector);
@@ -38,6 +56,10 @@ function splitSelectorList(...values: Array<string | null | undefined>) {
     }
 
     return selectors;
+}
+
+function serializeSecondarySelectors(selectors: string[]) {
+    return selectors.length ? JSON.stringify(selectors) : null;
 }
 
 function normalizeSelectorFields(data: Record<string, any>) {
@@ -51,8 +73,21 @@ function normalizeSelectorFields(data: Record<string, any>) {
 
     return {
         selector_price: selectorList[0] || null,
-        selector_secondary: selectorList.slice(1).join(', ') || null
+        selector_secondary: serializeSecondarySelectors(selectorList.slice(1))
     };
+}
+
+function getStableExtensionDeviceId() {
+    const interfaces = os.networkInterfaces();
+    const macs = Object.values(interfaces)
+        .flat()
+        .filter(Boolean)
+        .map((item: any) => String(item?.mac || '').trim().toLowerCase())
+        .filter((mac) => mac && mac !== '00:00:00:00:00:00');
+    const uniqueMacs = [...new Set(macs)].sort();
+    const fingerprint = ['trackify-extension', os.hostname(), os.platform(), os.arch(), uniqueMacs.join('|')].join('::');
+    const digest = crypto.createHash('sha256').update(fingerprint).digest('hex');
+    return `trackify-ext-${digest.slice(0, 32)}`;
 }
 
 function getDeviceIdFromRequest(req: any) {
@@ -86,8 +121,7 @@ function getEffectiveDeviceAccess(device: any) {
 }
 
 function upsertDevice(payload: Record<string, any>) {
-    const deviceId = String(payload.device_id || '').trim();
-    if (!deviceId) throw new Error('device_id is required');
+    const deviceId = String(payload.device_id || '').trim() || getStableExtensionDeviceId();
 
     db.prepare(`
         INSERT INTO devices (device_id, device_name, platform, user_agent, extension_version, status, last_seen_at, created_at, updated_at)
@@ -151,10 +185,7 @@ function parseSecondaryMap(value: any) {
 
 function getSelectorDetails(product: any, selector: string | null, role: 'primary' | 'secondary') {
     const primary = String(product.selector_price || '').trim();
-    const secondarySelectors = String(product.selector_secondary || '')
-        .split(',')
-        .map((part: string) => part.trim())
-        .filter(Boolean);
+    const secondarySelectors = parseSelectorValue(product.selector_secondary);
     const allSelectors = [primary, ...secondarySelectors].filter(Boolean);
     const resolvedSelector = String(selector || '').trim() || (role === 'primary' ? primary : '');
     const overallIndex = resolvedSelector ? allSelectors.indexOf(resolvedSelector) + 1 : 0;
@@ -270,11 +301,11 @@ app.post('/api/products', async (req, res) => {
 
                 const normalizedExisting = {
                     selector_price: existingSelectors[0] || null,
-                    selector_secondary: existingSelectors.slice(1).join(', ') || null
+                    selector_secondary: serializeSecondarySelectors(existingSelectors.slice(1))
                 };
                 const normalizedMerged = {
                     selector_price: mergedSelectors[0] || null,
-                    selector_secondary: mergedSelectors.slice(1).join(', ') || null
+                    selector_secondary: serializeSecondarySelectors(mergedSelectors.slice(1))
                 };
 
                 if (normalizedMerged.selector_price !== normalizedExisting.selector_price) {
