@@ -28,28 +28,28 @@ function mapAccessState(access) {
 }
 
 function mapProcessState(proc) {
-    if (proc?.running) return { label: 'Calisiyor', className: 'status-running' };
+    if (proc?.running) return { label: 'Çalışıyor', className: 'status-running' };
     if (proc?.lastExitCode !== null && proc?.lastExitCode !== undefined) return { label: 'Durdu', className: 'status-error' };
     return { label: 'Bekliyor', className: 'status-idle' };
 }
 
 function mapRegistryHealth(health) {
-    if (health?.ok) return { label: 'Bagli', className: 'status-active' };
-    if (health?.error) return { label: 'Ulasilamiyor', className: 'status-error' };
+    if (health?.ok) return { label: 'Bağlı', className: 'status-active' };
+    if (health?.error) return { label: 'Ulaşılamıyor', className: 'status-error' };
     return { label: 'Bekliyor', className: 'status-unknown' };
 }
 
 function mapBackendHealth(health, proc) {
-    if (health?.ok) return { label: 'Hazir', className: 'status-active' };
-    if (proc?.running) return { label: 'Basliyor', className: 'status-warning' };
-    if (proc?.lastExitCode !== null && proc?.lastExitCode !== undefined) return { label: 'Coktu', className: 'status-error' };
-    if (health?.error) return { label: 'Kapali', className: 'status-error' };
+    if (health?.ok) return { label: 'Hazır', className: 'status-active' };
+    if (proc?.running) return { label: 'Başlıyor', className: 'status-warning' };
+    if (proc?.lastExitCode !== null && proc?.lastExitCode !== undefined) return { label: 'Çöktü', className: 'status-error' };
+    if (health?.error) return { label: 'Kapalı', className: 'status-error' };
     return { label: 'Bekliyor', className: 'status-unknown' };
 }
 
 function mapExtensionUpdate(update) {
-    if (update?.available) return { label: 'Yeni Surum Var', className: 'status-warning' };
-    if (update?.version) return { label: 'Guncel Paket', className: 'status-active' };
+    if (update?.available) return { label: 'Yeni Sürüm Var', className: 'status-warning' };
+    if (update?.version) return { label: 'Güncel Paket', className: 'status-active' };
     if (update?.error) return { label: 'Kontrol Edilemedi', className: 'status-error' };
     return { label: 'Bekliyor', className: 'status-unknown' };
 }
@@ -68,56 +68,56 @@ function renderState(state) {
     $('launch-at-startup').disabled = state.preferences?.platform !== 'win32';
     $('onboarding-launch-checkbox').disabled = state.preferences?.platform !== 'win32';
     $('launch-at-startup-hint').textContent = state.preferences?.platform === 'win32'
-        ? 'Bu ayar aktifse uygulama Windows acilisinda tray olarak baslar.'
-        : 'Startup ayari su an yalnizca Windows tarafinda anlamlidir.';
+        ? 'Bu ayar aktifse uygulama Windows açılışında tray olarak başlar.'
+        : 'Startup ayarı şu an yalnızca Windows tarafında anlamlıdır.';
 
     setStatus('registry-status', 'registry-detail', mapRegistryHealth(state.registryHealth), state.registryHealth?.ok
-        ? `Registry erisimi aktif. Son kontrol: ${formatTime(state.registryHealth.checked_at)}`
+        ? `Registry erişimi aktif. Son kontrol: ${formatTime(state.registryHealth.checked_at)}`
         : (state.registryHealth?.error || 'Merkezi servis bekleniyor'));
 
     const backendDetail = state.backendHealth?.ok
-        ? `Backend saglikli. Son kontrol: ${formatTime(state.backendHealth.time)}`
+        ? `Backend sağlıklı. Son kontrol: ${formatTime(state.backendHealth.time)}`
         : (state.backend?.running
-            ? `Backend processi acik ama health alinamadi${state.backendHealth?.error ? `: ${state.backendHealth.error}` : '...' }`
+            ? `Backend süreci açık ama health alınamadı${state.backendHealth?.error ? `: ${state.backendHealth.error}` : '...'}`
             : (state.backend?.lastError
                 || (state.backend?.lastExitCode !== null && state.backend?.lastExitCode !== undefined
-                    ? `Son cikis kodu: ${state.backend.lastExitCode}`
+                    ? `Son çıkış kodu: ${state.backend.lastExitCode}`
                     : state.backendHealth?.error)
-                || 'Yerel backend kapali'));
+                || 'Yerel backend kapalı'));
     setStatus('backend-status', 'backend-detail', mapBackendHealth(state.backendHealth, state.backend), backendDetail);
 
     setStatus('worker-status', 'worker-detail', mapProcessState(state.worker), state.worker?.running
-        ? 'Worker arka planda tarama yapiyor'
-        : (state.worker?.lastError || 'Worker su an kapali'));
+        ? 'Worker arka planda tarama yapıyor'
+        : (state.worker?.lastError || 'Worker şu an kapalı'));
 
     const accessState = mapAccessState(state.access);
     const accessDetail = state.access?.blocked
         ? `${state.access.reason || 'Bu cihaz bloke edildi'}${state.access.blocked_until ? ` | Bitis: ${formatTime(state.access.blocked_until)}` : ''}`
-        : `Durum: ${state.access?.status || 'bilinmiyor'} | Son gorulme: ${formatTime(state.access?.checked_at)}`;
+        : `Durum: ${state.access?.status || 'bilinmiyor'} | Son görülme: ${formatTime(state.access?.checked_at)}`;
     setStatus('access-status', 'access-detail', accessState, accessDetail);
 
     const extensionState = mapExtensionUpdate(state.extensionUpdate);
     const extensionDetail = state.extensionUpdate?.available
-        ? `Yeni surum ${state.extensionUpdate.version} hazir. Son kontrol: ${formatTime(state.extensionUpdate.checked_at)}`
+        ? `Yeni sürüm ${state.extensionUpdate.version} hazır. Son kontrol: ${formatTime(state.extensionUpdate.checked_at)}`
         : (state.extensionUpdate?.version
             ? `Son paket ${state.extensionUpdate.version}. Dosya: ${state.extensionUpdate.file_name || '-'}`
             : (state.extensionUpdate?.download_url
-                ? `Manifest olmasa da son yuklenen paket indirilebilir. Dosya: ${state.extensionUpdate.file_name || 'Trackify-Extension-latest.zip'}`
+                ? `Manifest olmasa da son yüklenen paket indirilebilir. Dosya: ${state.extensionUpdate.file_name || 'Trackify-Extension-latest.zip'}`
                 : (state.extensionUpdate?.error || 'Manifest bekleniyor')))
     setStatus('extension-status', 'extension-detail', extensionState, extensionDetail);
 
     $('extension-download-hint').textContent = state.extensionUpdate?.downloadedFile
         ? `Son indirilen dosya: ${state.extensionUpdate.downloadedFile}`
-        : 'Buton son yuklenen ZIP paketini Downloads klasorune indirir.';
-    $('extension-install-hint').textContent = state.extensionUpdate?.install_hint || "Windows store disi Chrome uzantisi otomatik kurulmaz; masaustu uygulama sadece yeni paketi indirir ve kurulum adimini gosterir.";
+        : 'Buton son yüklenen ZIP paketini Downloads klasörüne indirir.';
+    $('extension-install-hint').textContent = state.extensionUpdate?.install_hint || "Windows store dışı Chrome uzantısı otomatik kurulmaz; masaüstü uygulama sadece yeni paketi indirir ve kurulum adımını gösterir.";
     $('install-guide-file').textContent = state.extensionUpdate?.downloadedFile
         ? `Dosya: ${state.extensionUpdate.downloadedFile}`
-        : 'Downloads klasorune inen paketi ac.';
+        : 'Downloads klasörüne inen paketi aç.';
 
     const banner = $('block-banner');
     if (state.access?.blocked) {
         banner.classList.remove('hidden');
-        banner.textContent = state.access.reason || 'Bu cihaz registry tarafinda engelli.';
+        banner.textContent = state.access.reason || 'Bu cihaz registry tarafında engelli.';
     } else {
         banner.classList.add('hidden');
         banner.textContent = '';
@@ -127,13 +127,13 @@ function renderState(state) {
     $('logs').textContent = logs.join('\n');
 
     const summary = [];
-    summary.push(state.backendHealth?.ok ? 'Backend hazir.' : (state.backend?.running ? 'Backend basliyor.' : 'Backend kapali.'));
-    summary.push(state.worker?.running ? 'Worker calisiyor.' : 'Worker bekliyor.');
-    summary.push(state.access?.blocked ? 'Cihaz su an engelli.' : 'Cihaz aktif durumda.');
+    summary.push(state.backendHealth?.ok ? 'Backend hazır.' : (state.backend?.running ? 'Backend başlıyor.' : 'Backend kapalı.'));
+    summary.push(state.worker?.running ? 'Worker çalışıyor.' : 'Worker bekliyor.');
+    summary.push(state.access?.blocked ? 'Cihaz şu an engelli.' : 'Cihaz aktif durumda.');
     summary.push(
         state.extensionUpdate?.available
-            ? `Uzanti ${state.extensionUpdate.version} indirilmeyi bekliyor.`
-            : (state.extensionUpdate?.download_url ? 'Son ZIP paketi indirilebilir.' : 'Uzanti paket durumu kontrol edilemedi.')
+            ? `Uzantı ${state.extensionUpdate.version} indirilmeyi bekliyor.`
+            : (state.extensionUpdate?.download_url ? 'Son ZIP paketi indirilebilir.' : 'Uzantı paket durumu kontrol edilemedi.')
     );
     $('summary-text').textContent = summary.join(' ');
 

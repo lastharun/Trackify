@@ -172,16 +172,16 @@
         <div class="hero">
             <div>
                 <h1>Trackify Registry</h1>
-                <p>Cihazlar, lisans, blok ve son gorulme durumu</p>
+                <p>Cihazlar, lisans, blok ve son görülme durumu</p>
             </div>
-            <div class="muted" id="status-bar">Hazirlaniyor...</div>
+            <div class="muted" id="status-bar">Hazırlanıyor...</div>
         </div>
 
         <div class="toolbar">
-            <input id="search" placeholder="device_id, owner, cihaz adi ara">
+            <input id="search" placeholder="device_id, owner, cihaz adı ara">
             <select id="status-filter">
-                <option value="">Tum durumlar</option>
-                <option value="online">Online son 24 saat</option>
+                <option value="">Tüm durumlar</option>
+                <option value="online">Son 24 saat online</option>
                 <option value="active">Active</option>
                 <option value="temp_block">Temp block</option>
                 <option value="perm_block">Perm block</option>
@@ -197,7 +197,7 @@
             </div>
             <div class="panel">
                 <h2>Detay</h2>
-                <div id="detail-view" class="empty">Soldan bir cihaz sec</div>
+                <div id="detail-view" class="empty">Soldan bir cihaz seç</div>
             </div>
         </div>
     </div>
@@ -250,7 +250,7 @@
 
         function renderDevices() {
             if (!state.devices.length) {
-                els.list.innerHTML = '<div class="empty">Kayitli cihaz yok</div>';
+                els.list.innerHTML = '<div class="empty">Kayıtlı cihaz yok</div>';
                 return;
             }
 

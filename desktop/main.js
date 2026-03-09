@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Menu, Tray, nativeImage, shell, ipcMain, Notification } = require('electron');
 const { spawn } = require('child_process');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -34,7 +35,7 @@ function getExtensionFallbackState() {
         file_name: 'Trackify-Extension-latest.zip',
         download_url: '/downloads/Trackify-Extension-latest.zip',
         latest_download_url: '/downloads/Trackify-Extension-latest.zip',
-        install_hint: 'Manifest olmasa bile son yuklenen ZIP indirilebilir. Kurulum kullanici tarafinda chrome://extensions ekranindan manuel yapilir.'
+        install_hint: 'Manifest olmasa bile son yüklenen ZIP indirilebilir. Kurulum kullanıcı tarafında chrome://extensions ekranından manuel yapılır.'
     };
 }
 
@@ -83,6 +84,20 @@ function pushLog(source, message) {
     publishState().catch(() => { });
 }
 
+function getStableDeviceId() {
+    const interfaces = os.networkInterfaces();
+    const macs = Object.values(interfaces)
+        .flat()
+        .filter(Boolean)
+        .map((item) => String(item.mac || '').trim().toLowerCase())
+        .filter((mac) => mac && mac !== '00:00:00:00:00:00');
+
+    const uniqueMacs = [...new Set(macs)].sort();
+    const fingerprint = [os.hostname(), os.platform(), os.arch(), uniqueMacs.join('|')].join('::');
+    const digest = crypto.createHash('sha256').update(fingerprint).digest('hex');
+    return `trackify-${digest.slice(0, 32)}`;
+}
+
 function getDeviceFile() {
     return path.join(app.getPath('userData'), 'desktop-device.json');
 }
@@ -95,6 +110,10 @@ function getRuntimeDataDir() {
 
 function getAppRuntimeRoot() {
     return app.isPackaged ? app.getAppPath() : rootDir;
+}
+
+function getServiceWorkingDirectory() {
+    return app.isPackaged ? process.resourcesPath : rootDir;
 }
 
 function getRuntimeSchemaPath() {
@@ -196,7 +215,7 @@ function setLaunchAtStartup(enabled) {
             args: []
         });
     } catch (error) {
-        pushLog('desktop', `Startup ayari yazilamadi: ${error.message}`);
+        pushLog('desktop', `Başlangıç ayarı yazılamadı: ${error.message}`);
     }
 
     return getDesktopPrefs();
@@ -222,7 +241,7 @@ function ensureDesktopDevice() {
     }
 
     desktopDevice = {
-        device_id: globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `trackify-desktop-${Date.now()}`,
+        device_id: getStableDeviceId(),
         device_name: `Trackify Desktop ${os.hostname()}`,
         platform: `${os.platform()} ${os.arch()}`
     };
@@ -266,16 +285,16 @@ async function refreshRegistryAccess(mode = 'heartbeat') {
 
         if (desktopAccessState.blocked && !wasBlocked) {
             new Notification({
-                title: 'Trackify erisimi kapatildi',
-                body: desktopAccessState.reason || 'Bu masaustu cihaz registry tarafinda engellendi.'
+                title: 'Trackify erişimi kapatıldı',
+                body: desktopAccessState.reason || 'Bu masaüstü cihaz registry tarafında engellendi.'
             }).show();
             await stopManagedServices();
         }
 
         if (!desktopAccessState.blocked && wasBlocked) {
             new Notification({
-                title: 'Trackify erisimi acildi',
-                body: 'Masaustu cihaz tekrar aktif duruma gecti.'
+                title: 'Trackify erişimi açıldı',
+                body: 'Masaüstü cihaz tekrar aktif duruma geçti.'
             }).show();
         }
     } catch (error) {
@@ -285,7 +304,7 @@ async function refreshRegistryAccess(mode = 'heartbeat') {
             checked_at: new Date().toISOString(),
             error: error.message
         };
-        pushLog('registry', `Erisim kontrol hatasi: ${error.message}`);
+        pushLog('registry', `Erişim kontrol hatası: ${error.message}`);
     }
 }
 
@@ -304,8 +323,8 @@ async function checkExtensionUpdate() {
 
         if (extensionUpdateState.available && prefs.lastNotifiedExtensionVersion !== manifest.version) {
             new Notification({
-                title: 'Yeni Trackify uzanti surumu var',
-                body: `Yeni surum ${manifest.version} indirilmeye hazir.`
+                title: 'Yeni Trackify uzantı sürümü var',
+                body: `Yeni sürüm ${manifest.version} indirilmeye hazır.`
             }).show();
             writeDesktopPrefs({
                 ...prefs,
@@ -326,7 +345,7 @@ async function checkExtensionUpdate() {
                     downloadedFile: prefs.lastDownloadedExtensionFile || null,
                     error: null
                 };
-                pushLog('extension-update', 'Manifest bulunamadi, latest ZIP fallback kullaniliyor.');
+                pushLog('extension-update', 'Manifest bulunamadı, son ZIP fallback ile kullanılacak.');
                 return;
             }
         } catch {
@@ -338,7 +357,7 @@ async function checkExtensionUpdate() {
             error: error.message,
             checked_at: new Date().toISOString()
         };
-        pushLog('extension-update', `Manifest kontrol hatasi: ${error.message}`);
+        pushLog('extension-update', `Manifest kontrol hatası: ${error.message}`);
     }
 }
 
@@ -351,7 +370,7 @@ async function downloadExtensionUpdate() {
         };
     }
     if (!extensionUpdateState?.download_url) {
-        throw new Error('ZIP paketi bulunamadi.');
+        throw new Error('ZIP paketi bulunamadı.');
     }
 
     const downloadUrl = new URL(extensionUpdateState.download_url, `${getRegistryBaseUrl()}/`).toString();
@@ -370,7 +389,7 @@ async function downloadExtensionUpdate() {
     extensionUpdateState.downloadedFile = targetPath;
 
     new Notification({
-        title: 'Uzanti paketi indirildi',
+        title: 'Uzantı paketi indirildi',
         body: `Dosya kaydedildi: ${path.basename(targetPath)}`
     }).show();
 
@@ -394,12 +413,12 @@ function attachProcessLogs(child, source) {
     child.on('exit', (code, signal) => {
         child.exitCode = code;
         child.lastError = signal ? `signal:${signal}` : null;
-        pushLog(source, `Process exited with code=${code ?? 'null'} signal=${signal ?? 'none'}`);
+        pushLog(source, `Süreç kapandı code=${code ?? 'null'} signal=${signal ?? 'none'}`);
         publishState().catch(() => { });
     });
     child.on('error', (error) => {
         child.lastError = error.message;
-        pushLog(source, `Process error: ${error.message}`);
+        pushLog(source, `Süreç hatası: ${error.message}`);
         publishState().catch(() => { });
     });
 }
@@ -418,12 +437,12 @@ async function startBackendProcess() {
     if (app.isPackaged) runtimeEnv.ELECTRON_RUN_AS_NODE = '1';
 
     backendProcess = spawn(command, args, {
-        cwd: getAppRuntimeRoot(),
+        cwd: getServiceWorkingDirectory(),
         env: runtimeEnv,
         stdio: ['ignore', 'pipe', 'pipe']
     });
     attachProcessLogs(backendProcess, 'backend');
-    pushLog('desktop', 'Backend baslatildi.');
+    pushLog('desktop', 'Backend başlatıldı.');
     scheduleStateRefresh();
 }
 
@@ -441,12 +460,12 @@ async function startWorkerProcess() {
     if (app.isPackaged) runtimeEnv.ELECTRON_RUN_AS_NODE = '1';
 
     workerProcess = spawn(command, args, {
-        cwd: getAppRuntimeRoot(),
+        cwd: getServiceWorkingDirectory(),
         env: runtimeEnv,
         stdio: ['ignore', 'pipe', 'pipe']
     });
     attachProcessLogs(workerProcess, 'worker');
-    pushLog('desktop', 'Worker baslatildi.');
+    pushLog('desktop', 'Worker başlatıldı.');
     scheduleStateRefresh();
 }
 
@@ -459,7 +478,7 @@ async function stopManagedServices() {
 
 async function startManagedServices() {
     if (desktopAccessState.blocked) {
-        pushLog('desktop', 'Servisler baslatilmadi: cihaz blocked.');
+        pushLog('desktop', 'Servisler başlatılmadı: cihaz engelli.');
         return;
     }
     await startBackendProcess();
@@ -470,7 +489,7 @@ async function startManagedServices() {
 async function restartManagedServices() {
     await stopManagedServices();
     setTimeout(() => {
-        startManagedServices().catch((error) => pushLog('desktop', `Restart hatasi: ${error.message}`));
+        startManagedServices().catch((error) => pushLog('desktop', `Yeniden başlatma hatası: ${error.message}`));
     }, 800);
 }
 
@@ -521,11 +540,11 @@ function createTray() {
     tray = new Tray(icon);
     tray.setToolTip('Trackify Control Center');
     tray.setContextMenu(Menu.buildFromTemplate([
-        { label: 'Masaustu Panelini Ac', click: () => mainWindow?.show() },
-        { label: 'Servisleri Baslat', click: () => startManagedServices() },
+        { label: 'Masaüstü Panelini Aç', click: () => mainWindow?.show() },
+        { label: 'Servisleri Başlat', click: () => startManagedServices() },
         { type: 'separator' },
         {
-            label: 'Cikis', click: () => {
+            label: 'Çıkış', click: () => {
                 isQuitting = true;
                 app.quit();
             }
@@ -550,7 +569,7 @@ app.whenReady().then(() => {
     ensureDesktopDevice();
     refreshRegistryAccess('register').catch(() => { });
     checkExtensionUpdate().catch(() => { });
-    startManagedServices().catch((error) => pushLog('desktop', `Startup hatasi: ${error.message}`));
+    startManagedServices().catch((error) => pushLog('desktop', `Başlangıç hatası: ${error.message}`));
     statusTimer = setInterval(() => {
         refreshRegistryAccess('heartbeat').catch(() => { });
         checkExtensionUpdate().catch(() => { });
