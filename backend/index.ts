@@ -741,8 +741,8 @@ app.post('/api/test-telegram', async (req, res) => {
     try {
         const { userId } = req.body;
         if (!userId) return res.status(400).json({ error: 'userId is required' });
-        const token = process.env.TELEGRAM_BOT_TOKEN;
-        if (!token) return res.status(400).json({ error: 'TELEGRAM_BOT_TOKEN not configured in .env' });
+        const { token } = getUserTelegramConfig();
+        if (!token) return res.status(400).json({ error: 'telegram bot token not configured' });
         const { sendTelegramMessage } = await import('../notifications/telegram');
         await sendTelegramMessage(token, userId, '🧪 <b>Price Tracker Test</b>\n\nTelegram bildirimleri aktif! Fiyat değişimlerini buradan takip edeceksiniz.');
         res.json({ success: true });

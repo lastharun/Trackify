@@ -234,6 +234,7 @@ async function loadSettings() {
     setCheck('browser-notif', s.browser_notifications === '1');
     setCheck('never-stop', s.never_stop_on_errors === '1');
     if (s.telegram_user_id) document.getElementById('telegram-id').value = s.telegram_user_id;
+    if (s.telegram_bot_token) document.getElementById('telegram-bot-token').value = s.telegram_bot_token;
     if (s.language) document.getElementById('language').value = s.language;
 
     const iv = parseInt(s.default_interval || 10);
@@ -325,8 +326,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Save Telegram
     document.getElementById('save-telegram')?.addEventListener('click', async () => {
         const id = document.getElementById('telegram-id').value.trim();
+        const token = document.getElementById('telegram-bot-token').value.trim();
         await saveSetting('telegram_user_id', id);
-        showToast('✅ Telegram ID kaydedildi!');
+        await saveSetting('telegram_bot_token', token);
+        showToast('✅ Telegram ayarları kaydedildi!');
     });
 
     // Test Telegram

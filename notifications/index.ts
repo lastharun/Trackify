@@ -4,7 +4,11 @@ import { db } from '../database/index';
 export function getUserTelegramConfig() {
     const rows = db.prepare('SELECT key, value FROM settings').all() as Array<{ key: string; value: string }>;
     const settings = Object.fromEntries(rows.map((row) => [row.key, row.value]));
-    const token = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
+    const token = String(
+        settings.telegram_bot_token
+        || process.env.TELEGRAM_BOT_TOKEN
+        || ''
+    ).trim();
     const chatId = String(
         settings.telegram_user_id
         || settings.telegram_chat_id
