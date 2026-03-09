@@ -16,6 +16,12 @@ function ensureFile(filePath) {
     return filePath;
 }
 
+function normalizeName(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '');
+}
+
 function parseLatestYml(filePath) {
     const raw = fs.readFileSync(filePath, 'utf8');
     const versionMatch = raw.match(/^version:\s*(.+)$/m);
@@ -34,7 +40,12 @@ const buildMeta = fs.existsSync(buildMetaPath)
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 const latestYmlPath = ensureFile(path.join(releaseDir, 'latest.yml'));
 const latest = parseLatestYml(latestYmlPath);
-const installerSourceName = latest.path || fs.readdirSync(releaseDir).find((name) => name.toLowerCase().endsWith('.exe'));
+const releaseFiles = fs.readdirSync(releaseDir);
+const installerSourceName =
+    releaseFiles.find((name) => name === latest.path) ||
+    releaseFiles.find((name) => normalizeName(name) === normalizeName(latest.path)) ||
+    latest.path ||
+    releaseFiles.find((name) => name.toLowerCase().endsWith('.exe'));
 
 if (!installerSourceName) {
     throw new Error('Release klasorunde Windows installer bulunamadi.');
