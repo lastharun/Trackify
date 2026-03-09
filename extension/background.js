@@ -46,19 +46,7 @@ function normalizeExtractedText(value) {
     return String(value ?? '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
 }
 
-function generateDeviceId() {
-    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
-    return `tt-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
 async function ensureDeviceId() {
-    if (deviceIdCache) return deviceIdCache;
-    const stored = await chrome.storage.local.get([DEVICE_ID_KEY]);
-    if (stored?.[DEVICE_ID_KEY]) {
-        deviceIdCache = stored[DEVICE_ID_KEY];
-        return deviceIdCache;
-    }
-
     try {
         const manifest = chrome.runtime.getManifest();
         const res = await fetch(`${API}/device/bootstrap`, {
@@ -81,9 +69,9 @@ async function ensureDeviceId() {
         }
     } catch { }
 
-    deviceIdCache = generateDeviceId();
-    await chrome.storage.local.set({ [DEVICE_ID_KEY]: deviceIdCache });
-    return deviceIdCache;
+    deviceIdCache = null;
+    await chrome.storage.local.remove([DEVICE_ID_KEY]);
+    throw new Error('Trackify masaüstü uygulaması açık değil.');
 }
 
 async function setAccessState(nextState) {
@@ -182,11 +170,12 @@ async function refreshDeviceAccess(mode = 'heartbeat') {
     } catch (e) {
         console.error('[PT] Registry access error:', e.message);
         const previousState = await getAccessState();
+        const localAppMissing = /masaüstü uygulaması/i.test(String(e?.message || ''));
         return await setAccessState({
-            status: previousState?.status || 'unknown',
-            blocked: Boolean(previousState?.blocked),
-            reason: previousState?.reason || null,
-            blocked_until: previousState?.blocked_until || null
+            status: localAppMissing ? 'local_app_required' : (previousState?.status || 'unknown'),
+            blocked: localAppMissing ? true : Boolean(previousState?.blocked),
+            reason: localAppMissing ? String(e.message) : (previousState?.reason || null),
+            blocked_until: localAppMissing ? null : (previousState?.blocked_until || null)
         });
     }
 }
@@ -589,11 +578,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (request.action === 'get_access_status') {
         (async () => {
-            const state = await getAccessState();
-            sendResponse({
-                ...state,
-                device_id: await ensureDeviceId()
-            });
+            try {
+                const state = await getAccessState();
+                sendResponse({
+                    ...state,
+                    device_id: await ensureDeviceId()
+                });
+            } catch (e) {
+                const state = await setAccessState({
+                    status: 'local_app_required',
+                    blocked: true,
+                    reason: String(e.message || 'Trackify masaüstü uygulaması açık değil.'),
+                    blocked_until: null
+                });
+                sendResponse({
+                    ...state,
+                    device_id: null
+                });
+            }
         })();
         return true;
     }
@@ -662,11 +664,24 @@ chrome.windows.onFocusChanged.addListener((windowId) => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'refresh_access_status') {
         (async () => {
-            const state = await refreshAccessAndPropagate('heartbeat');
-            sendResponse({
-                ...state,
-                device_id: await ensureDeviceId()
-            });
+            try {
+                const state = await refreshAccessAndPropagate('heartbeat');
+                sendResponse({
+                    ...state,
+                    device_id: await ensureDeviceId()
+                });
+            } catch (e) {
+                const state = await setAccessState({
+                    status: 'local_app_required',
+                    blocked: true,
+                    reason: String(e.message || 'Trackify masaüstü uygulaması açık değil.'),
+                    blocked_until: null
+                });
+                sendResponse({
+                    ...state,
+                    device_id: null
+                });
+            }
         })();
         return true;
     }
