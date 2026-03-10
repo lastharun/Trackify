@@ -20,10 +20,12 @@
         * { box-sizing: border-box; }
         body {
             margin: 0;
+            min-height: 100vh;
             font-family: Inter, system-ui, sans-serif;
             background: radial-gradient(circle at top, #172554, #0b1020 45%);
             color: var(--text);
         }
+        .hidden { display: none !important; }
         .shell {
             max-width: 1320px;
             margin: 0 auto;
@@ -38,7 +40,21 @@
         }
         .hero h1 { margin: 0; font-size: 28px; }
         .hero p { margin: 8px 0 0; color: var(--muted); }
-        .toolbar, .panel {
+        .hero-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .mode-switch {
+            display: inline-flex;
+            gap: 8px;
+        }
+        .mode-switch button.active {
+            background: linear-gradient(135deg, #2563eb, #3b82f6);
+        }
+        .toolbar,
+        .panel,
+        .login-card {
             background: rgba(18,26,48,0.92);
             border: 1px solid var(--line);
             border-radius: 18px;
@@ -46,7 +62,7 @@
         }
         .toolbar {
             display: grid;
-            grid-template-columns: 1.4fr 180px 180px 120px;
+            grid-template-columns: 1.5fr 220px 140px;
             gap: 12px;
             padding: 16px;
             margin-bottom: 18px;
@@ -62,9 +78,16 @@
         }
         button {
             cursor: pointer;
-            font-weight: 600;
+            font-weight: 700;
         }
         button.primary { background: linear-gradient(135deg, #2563eb, #3b82f6); }
+        button.danger {
+            background: linear-gradient(135deg, #b91c1c, #ef4444);
+            border-color: rgba(239,68,68,0.24);
+        }
+        button.secondary {
+            background: rgba(255,255,255,0.03);
+        }
         .layout {
             display: grid;
             grid-template-columns: 1.2fr 0.8fr;
@@ -109,12 +132,14 @@
         .badge.perm_block { background: rgba(239,68,68,0.14); color: #fca5a5; }
         .badge.temp_block { background: rgba(245,158,11,0.14); color: #fcd34d; }
         .badge.license_expired { background: rgba(239,68,68,0.14); color: #fca5a5; }
-        .detail-grid {
+        .detail-grid,
+        .meta,
+        .actions {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 10px;
-            margin-bottom: 16px;
         }
+        .detail-grid { margin-bottom: 16px; }
         .detail-box {
             background: rgba(255,255,255,0.03);
             border: 1px solid var(--line);
@@ -128,9 +153,6 @@
             color: #cbd5e1;
         }
         .actions {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
             margin: 12px 0 18px;
         }
         .events {
@@ -151,30 +173,94 @@
             padding: 20px;
             text-align: center;
         }
-        .meta {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 10px;
-        }
         .status-bar {
-            margin-top: 12px;
             color: var(--muted);
             font-size: 13px;
         }
+        .login-shell {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        .login-card {
+            width: min(100%, 480px);
+            padding: 28px;
+            box-shadow: 0 20px 80px rgba(0,0,0,0.3);
+        }
+        .login-card h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+        .login-card p {
+            margin: 10px 0 0;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+        .login-form {
+            display: grid;
+            gap: 12px;
+            margin-top: 22px;
+        }
+        .login-error {
+            color: #fca5a5;
+            min-height: 20px;
+            font-size: 13px;
+        }
+        .helper {
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 12px;
+        }
         @media (max-width: 1024px) {
-            .layout, .toolbar, .detail-grid, .actions, .meta { grid-template-columns: 1fr; }
+            .layout,
+            .toolbar,
+            .detail-grid,
+            .meta,
+            .actions,
+            .hero {
+                grid-template-columns: 1fr;
+            }
+            .hero {
+                align-items: flex-start;
+            }
+            .hero-actions {
+                width: 100%;
+                justify-content: space-between;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="shell">
+    <div id="login-screen" class="login-shell">
+        <div class="login-card">
+            <h1>Trackify Registry</h1>
+            <p>Admin paneline erişmek için geçerli registry token’ını gir. Token doğrulanmadan cihaz listesi ve detay ekranı açılmaz.</p>
+            <div class="login-form">
+                <input id="login-token" type="password" autocomplete="current-password" placeholder="Admin token">
+                <button id="login-btn" class="primary">Panele giriş yap</button>
+                <div id="login-error" class="login-error"></div>
+            </div>
+            <div class="helper">Token yalnızca bu tarayıcıda saklanır. İstersen sonrasında çıkış yaparak temizleyebilirsin.</div>
+        </div>
+    </div>
+
+    <div id="app-shell" class="shell hidden">
         <div class="hero">
             <div>
                 <h1>Trackify Registry</h1>
                 <p>Cihazlar, lisans, blok ve son görülme durumu</p>
             </div>
-            <div class="muted" id="status-bar">Hazırlanıyor...</div>
+            <div class="hero-actions">
+                <div class="mode-switch">
+                    <button id="devices-tab" class="secondary">Cihazlar</button>
+                    <button id="licenses-tab" class="secondary">Lisanslar</button>
+                </div>
+                <div class="muted" id="device-count">Hazırlanıyor...</div>
+                <button id="create-license-btn" class="secondary hidden">Yeni lisans</button>
+                <button id="logout-btn" class="secondary">Çıkış yap</button>
+            </div>
         </div>
 
         <div class="toolbar">
@@ -182,17 +268,17 @@
             <select id="status-filter">
                 <option value="">Tüm durumlar</option>
                 <option value="online">Son 24 saat online</option>
-                <option value="active">Active</option>
-                <option value="temp_block">Temp block</option>
-                <option value="perm_block">Perm block</option>
+                <option value="active">Aktif</option>
+                <option value="temp_block">Geçici blok</option>
+                <option value="perm_block">Kalıcı blok</option>
             </select>
-            <input id="admin-token" placeholder="Admin token">
             <button id="refresh-btn" class="primary">Yenile</button>
         </div>
 
         <div class="layout">
             <div class="panel">
                 <h2>Cihazlar</h2>
+                <div class="status-bar" id="status-bar">Hazırlanıyor...</div>
                 <div class="device-list" id="device-list"></div>
             </div>
             <div class="panel">
@@ -204,35 +290,31 @@
 
     <script>
         const state = {
+            mode: 'devices',
             devices: [],
-            selected: null
+            licenses: [],
+            selected: null,
+            token: ''
         };
 
         const els = {
+            loginScreen: document.getElementById('login-screen'),
+            appShell: document.getElementById('app-shell'),
+            loginToken: document.getElementById('login-token'),
+            loginBtn: document.getElementById('login-btn'),
+            loginError: document.getElementById('login-error'),
+            logoutBtn: document.getElementById('logout-btn'),
+            devicesTab: document.getElementById('devices-tab'),
+            licensesTab: document.getElementById('licenses-tab'),
+            createLicenseBtn: document.getElementById('create-license-btn'),
             search: document.getElementById('search'),
             status: document.getElementById('status-filter'),
-            token: document.getElementById('admin-token'),
             list: document.getElementById('device-list'),
             detail: document.getElementById('detail-view'),
             refresh: document.getElementById('refresh-btn'),
-            statusBar: document.getElementById('status-bar')
+            statusBar: document.getElementById('status-bar'),
+            deviceCount: document.getElementById('device-count')
         };
-
-        els.token.value = localStorage.getItem('registry_admin_token') || '';
-
-        function saveToken() {
-            localStorage.setItem('registry_admin_token', els.token.value.trim());
-        }
-
-        async function adminFetch(path, init = {}) {
-            saveToken();
-            const headers = new Headers(init.headers || {});
-            headers.set('x-registry-admin-token', els.token.value.trim());
-            if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json');
-            const res = await fetch(path, { ...init, headers });
-            if (!res.ok) throw new Error(await res.text());
-            return res.json();
-        }
 
         function escapeHtml(value) {
             return String(value || '')
@@ -248,7 +330,76 @@
             return new Date(String(value).replace(' ', 'T') + 'Z').toLocaleString('tr-TR');
         }
 
+        function setStoredToken(token) {
+            localStorage.setItem('registry_admin_token', String(token || '').trim());
+        }
+
+        function clearStoredToken() {
+            localStorage.removeItem('registry_admin_token');
+        }
+
+        function setAuthState(isAuthenticated) {
+            els.loginScreen.classList.toggle('hidden', isAuthenticated);
+            els.appShell.classList.toggle('hidden', !isAuthenticated);
+        }
+
+        function setLoginError(message) {
+            els.loginError.textContent = message || '';
+        }
+
+        async function adminFetch(url, init = {}) {
+            const headers = new Headers(init.headers || {});
+            headers.set('x-registry-admin-token', state.token);
+            if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json');
+            const response = await fetch(url, { ...init, headers });
+            if (!response.ok) {
+                const errorText = await response.text();
+                if (response.status === 401) {
+                    logout('Oturum süresi doldu veya token geçersiz.');
+                }
+                throw new Error(errorText || `HTTP ${response.status}`);
+            }
+            if (response.status === 204) return null;
+            return response.json();
+        }
+
+        function renderFilterOptions() {
+            const options = state.mode === 'devices'
+                ? [
+                    ['','Tüm durumlar'],
+                    ['online','Son 24 saat online'],
+                    ['active','Aktif'],
+                    ['temp_block','Geçici blok'],
+                    ['perm_block','Kalıcı blok'],
+                    ['license_expired','Lisans süresi dolmuş']
+                ]
+                : [
+                    ['','Tüm lisanslar'],
+                    ['active','Aktif'],
+                    ['disabled','Pasif'],
+                    ['bound','Cihaza bağlı'],
+                    ['unbound','Boşta']
+                ];
+            const current = els.status.value;
+            els.status.innerHTML = options.map(([value, label]) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`).join('');
+            els.status.value = options.some(([value]) => value === current) ? current : '';
+            els.search.placeholder = state.mode === 'devices'
+                ? 'device_id, lisans, owner, cihaz adı ara'
+                : 'lisans anahtarı, müşteri adı, bağlı cihaz ara';
+        }
+
+        function setMode(mode) {
+            state.mode = mode;
+            state.selected = null;
+            els.devicesTab.classList.toggle('active', mode === 'devices');
+            els.licensesTab.classList.toggle('active', mode === 'licenses');
+            els.createLicenseBtn.classList.toggle('hidden', mode !== 'licenses');
+            els.detail.innerHTML = `<div class="empty">${mode === 'devices' ? 'Soldan bir cihaz seç' : 'Soldan bir lisans seç'}</div>`;
+            renderFilterOptions();
+        }
+
         function renderDevices() {
+            els.deviceCount.textContent = `${state.devices.length} cihaz listelendi`;
             if (!state.devices.length) {
                 els.list.innerHTML = '<div class="empty">Kayıtlı cihaz yok</div>';
                 return;
@@ -261,11 +412,11 @@
                         <span class="badge ${escapeHtml(device.status)}">${escapeHtml(device.status)}</span>
                     </div>
                     <div class="row">
-                        <div class="muted">${escapeHtml(device.device_id)}</div>
+                        <div class="muted">${escapeHtml(device.license_key || device.device_id)}</div>
                         <div class="muted">${escapeHtml(device.platform || '')}</div>
                     </div>
                     <div class="row">
-                        <div class="muted">Son gorulme: ${escapeHtml(formatDate(device.last_seen_at))}</div>
+                        <div class="muted">Son görülme: ${escapeHtml(formatDate(device.last_seen_at))}</div>
                         <div class="muted">IP: ${escapeHtml(device.last_ip || '-')}</div>
                     </div>
                 </div>
@@ -276,7 +427,36 @@
             });
         }
 
-        function renderDetail(payload) {
+        function renderLicenses() {
+            els.deviceCount.textContent = `${state.licenses.length} lisans listelendi`;
+            if (!state.licenses.length) {
+                els.list.innerHTML = '<div class="empty">Kayıtlı lisans yok</div>';
+                return;
+            }
+
+            els.list.innerHTML = state.licenses.map(license => `
+                <div class="device-card ${state.selected?.license_key === license.license_key ? 'active' : ''}" data-license-key="${escapeHtml(license.license_key)}">
+                    <div class="row">
+                        <div class="title">${escapeHtml(license.owner_label || license.license_key)}</div>
+                        <span class="badge ${escapeHtml(license.status || 'active')}">${escapeHtml(license.status || 'active')}</span>
+                    </div>
+                    <div class="row">
+                        <div class="muted">${escapeHtml(license.license_key)}</div>
+                        <div class="muted">${license.bound_device_id ? 'Bağlı cihaz var' : 'Henüz bağlı değil'}</div>
+                    </div>
+                    <div class="row">
+                        <div class="muted">Bitiş: ${escapeHtml(formatDate(license.expires_at))}</div>
+                        <div class="muted">${escapeHtml(license.bound_device_id || '-')}</div>
+                    </div>
+                </div>
+            `).join('');
+
+            els.list.querySelectorAll('[data-license-key]').forEach(card => {
+                card.addEventListener('click', () => openLicense(card.dataset.licenseKey));
+            });
+        }
+
+        function renderDeviceDetail(payload) {
             const { device, events } = payload;
             state.selected = device;
             const isBlocked = ['perm_block', 'temp_block', 'license_expired'].includes(device.effective_status);
@@ -285,13 +465,13 @@
                 <div class="detail-grid">
                     <div class="detail-box"><div class="muted">Device ID</div><code>${escapeHtml(device.device_id)}</code></div>
                     <div class="detail-box"><div class="muted">Durum</div><div class="badge ${escapeHtml(device.effective_status)}">${escapeHtml(device.effective_status)}</div></div>
-                    <div class="detail-box"><div class="muted">Son IP</div><code>${escapeHtml(device.last_ip || '-')}</code></div>
-                    <div class="detail-box"><div class="muted">Son gorulme</div><code>${escapeHtml(formatDate(device.last_seen_at))}</code></div>
+                    <div class="detail-box"><div class="muted">Lisans</div><code>${escapeHtml(device.license_key || '-')}</code></div>
+                    <div class="detail-box"><div class="muted">Son görülme</div><code>${escapeHtml(formatDate(device.last_seen_at))}</code></div>
                 </div>
 
                 <div class="meta">
-                    <input id="owner-input" placeholder="Owner label" value="${escapeHtml(device.owner_label || '')}">
-                    <input id="license-input" placeholder="Lisans bitis YYYY-MM-DD HH:MM:SS" value="${escapeHtml(device.license_expires_at || '')}">
+                    <input id="owner-input" placeholder="Müşteri adı" value="${escapeHtml(device.owner_label || '')}">
+                    <input id="license-input" placeholder="Lisans bitiş YYYY-MM-DD HH:MM:SS" value="${escapeHtml(device.license_expires_at || '')}">
                 </div>
                 <div class="meta">
                     <input id="reason-input" placeholder="Sebep / not" value="${escapeHtml(device.reason || '')}">
@@ -299,10 +479,11 @@
                 </div>
 
                 <div class="actions">
-                    <button id="perm-block-btn">${isBlocked ? 'Kalici blok guncelle' : 'Kalici blokla'}</button>
-                    <button id="temp-block-btn">24 saat blokla</button>
-                    <button id="unblock-btn">Engeli kaldir</button>
-                    <button id="reload-btn">Detayi yenile</button>
+                    <button id="perm-block-btn" class="secondary">${isBlocked ? 'Kalıcı blok güncelle' : 'Kalıcı blokla'}</button>
+                    <button id="temp-block-btn" class="secondary">24 saat blokla</button>
+                    <button id="unblock-btn" class="secondary">Engeli kaldır</button>
+                    <button id="reload-btn" class="secondary">Detayı yenile</button>
+                    <button id="delete-btn" class="danger">Cihazı sil</button>
                 </div>
 
                 <h2 style="margin:0 0 12px">Olaylar</h2>
@@ -328,63 +509,260 @@
                         reason: document.getElementById('reason-input').value
                     })
                 });
-                await loadDevices();
+                await loadCurrentList();
                 await openDevice(device.device_id);
             });
 
             document.getElementById('perm-block-btn').addEventListener('click', async () => {
                 await adminFetch(`/api/admin/devices/${encodeURIComponent(device.device_id)}/block`, {
                     method: 'POST',
-                    body: JSON.stringify({ mode: 'perm', reason: document.getElementById('reason-input').value || 'Admin panel block' })
+                    body: JSON.stringify({
+                        mode: 'perm',
+                        reason: document.getElementById('reason-input').value || 'Admin panel block'
+                    })
                 });
-                await loadDevices();
+                await loadCurrentList();
                 await openDevice(device.device_id);
             });
 
             document.getElementById('temp-block-btn').addEventListener('click', async () => {
                 await adminFetch(`/api/admin/devices/${encodeURIComponent(device.device_id)}/block`, {
                     method: 'POST',
-                    body: JSON.stringify({ mode: 'temp', duration: '24h', reason: document.getElementById('reason-input').value || 'Admin panel temp block' })
+                    body: JSON.stringify({
+                        mode: 'temp',
+                        duration: '24h',
+                        reason: document.getElementById('reason-input').value || '24 saat geçici blok'
+                    })
                 });
-                await loadDevices();
+                await loadCurrentList();
                 await openDevice(device.device_id);
             });
 
             document.getElementById('unblock-btn').addEventListener('click', async () => {
                 await adminFetch(`/api/admin/devices/${encodeURIComponent(device.device_id)}/unblock`, { method: 'POST' });
-                await loadDevices();
+                await loadCurrentList();
                 await openDevice(device.device_id);
             });
 
-            document.getElementById('reload-btn').addEventListener('click', () => openDevice(device.device_id));
+            document.getElementById('reload-btn').addEventListener('click', async () => {
+                await openDevice(device.device_id);
+            });
+
+            document.getElementById('delete-btn').addEventListener('click', async () => {
+                const confirmed = window.confirm(`"${device.owner_label || device.device_name || device.device_id}" kaydını kalıcı olarak silmek istiyor musun?`);
+                if (!confirmed) return;
+                await adminFetch(`/api/admin/devices/${encodeURIComponent(device.device_id)}`, { method: 'DELETE' });
+                state.selected = null;
+                els.detail.innerHTML = '<div class="empty">Cihaz silindi. Soldan başka bir cihaz seç.</div>';
+                await loadCurrentList();
+            });
         }
 
-        async function loadDevices() {
-            const params = new URLSearchParams();
-            if (els.search.value.trim()) params.set('search', els.search.value.trim());
-            if (els.status.value) params.set('status', els.status.value);
-            const data = await adminFetch(`/api/admin/devices?${params.toString()}`);
-            state.devices = data.devices || [];
-            renderDevices();
-            els.statusBar.textContent = `${state.devices.length} cihaz listelendi`;
+        function renderLicenseDetail(payload) {
+            const { license, device } = payload;
+            state.selected = license;
+            els.detail.innerHTML = `
+                <div class="detail-grid">
+                    <div class="detail-box"><div class="muted">Lisans anahtarı</div><code>${escapeHtml(license.license_key)}</code></div>
+                    <div class="detail-box"><div class="muted">Durum</div><div class="badge ${escapeHtml(license.status || 'active')}">${escapeHtml(license.status || 'active')}</div></div>
+                    <div class="detail-box"><div class="muted">Bağlı cihaz</div><code>${escapeHtml(license.bound_device_id || '-')}</code></div>
+                    <div class="detail-box"><div class="muted">Son aktivasyon</div><code>${escapeHtml(formatDate(license.last_activated_at))}</code></div>
+                </div>
+                <div class="meta">
+                    <input id="license-owner-input" placeholder="Müşteri adı" value="${escapeHtml(license.owner_label || '')}">
+                    <input id="license-expiry-input" placeholder="Bitiş YYYY-MM-DD HH:MM:SS" value="${escapeHtml(license.expires_at || '')}">
+                </div>
+                <div class="meta">
+                    <select id="license-status-input">
+                        <option value="active" ${license.status === 'active' ? 'selected' : ''}>Aktif</option>
+                        <option value="disabled" ${license.status === 'disabled' ? 'selected' : ''}>Pasif</option>
+                    </select>
+                    <input id="license-notes-input" placeholder="Not" value="${escapeHtml(license.notes || '')}">
+                </div>
+                <div class="actions">
+                    <button id="save-license-btn" class="primary">Kaydet</button>
+                    <button id="reset-binding-btn" class="secondary">Cihaz bağını sıfırla</button>
+                    <button id="reload-license-btn" class="secondary">Detayı yenile</button>
+                </div>
+                <h2 style="margin:0 0 12px">Bağlı cihaz</h2>
+                <div class="events">
+                    ${device ? `
+                        <div class="event">
+                            <div class="row">
+                                <strong>${escapeHtml(device.owner_label || device.device_name || device.device_id)}</strong>
+                                <span class="muted">${escapeHtml(formatDate(device.last_seen_at))}</span>
+                            </div>
+                            <pre style="white-space:pre-wrap;word-break:break-word;color:#cbd5e1;margin:8px 0 0;font-size:12px">${escapeHtml(JSON.stringify({
+                                device_id: device.device_id,
+                                platform: device.platform,
+                                last_ip: device.last_ip,
+                                status: device.status
+                            }, null, 2))}</pre>
+                        </div>` : '<div class="empty">Bu lisans henüz bir cihaza bağlanmadı.</div>'}
+                </div>
+            `;
+
+            document.getElementById('save-license-btn').addEventListener('click', async () => {
+                await adminFetch(`/api/admin/licenses/${encodeURIComponent(license.license_key)}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                        owner_label: document.getElementById('license-owner-input').value,
+                        expires_at: document.getElementById('license-expiry-input').value,
+                        status: document.getElementById('license-status-input').value,
+                        notes: document.getElementById('license-notes-input').value
+                    })
+                });
+                await loadCurrentList();
+                await openLicense(license.license_key);
+            });
+
+            document.getElementById('reset-binding-btn').addEventListener('click', async () => {
+                await adminFetch(`/api/admin/licenses/${encodeURIComponent(license.license_key)}/reset-device`, { method: 'POST' });
+                await loadCurrentList();
+                await openLicense(license.license_key);
+            });
+
+            document.getElementById('reload-license-btn').addEventListener('click', async () => {
+                await openLicense(license.license_key);
+            });
         }
 
         async function openDevice(deviceId) {
             const payload = await adminFetch(`/api/admin/devices/${encodeURIComponent(deviceId)}`);
+            renderDeviceDetail(payload);
             renderDevices();
-            renderDetail(payload);
         }
 
-        els.refresh.addEventListener('click', loadDevices);
-        els.search.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter') loadDevices();
-        });
-        els.status.addEventListener('change', loadDevices);
+        async function openLicense(licenseKey) {
+            const payload = await adminFetch(`/api/admin/licenses/${encodeURIComponent(licenseKey)}`);
+            renderLicenseDetail(payload);
+            renderLicenses();
+        }
 
-        loadDevices().catch((error) => {
-            els.statusBar.textContent = 'Panel baglantisi basarisiz';
-            els.list.innerHTML = `<div class="empty">${escapeHtml(String(error.message || error))}</div>`;
+        async function loadDevices() {
+            els.statusBar.textContent = 'Cihazlar yükleniyor...';
+            const params = new URLSearchParams();
+            const search = els.search.value.trim();
+            const status = els.status.value.trim();
+            if (search) params.set('search', search);
+            if (status) params.set('status', status);
+            const data = await adminFetch(`/api/admin/devices?${params.toString()}`);
+            state.devices = data.devices || [];
+            renderDevices();
+            els.statusBar.textContent = `${state.devices.length} cihaz kaydı gösteriliyor.`;
+        }
+
+        async function loadLicenses() {
+            els.statusBar.textContent = 'Lisanslar yükleniyor...';
+            const params = new URLSearchParams();
+            const search = els.search.value.trim();
+            const status = els.status.value.trim();
+            if (search) params.set('search', search);
+            if (status) params.set('status', status);
+            const data = await adminFetch(`/api/admin/licenses?${params.toString()}`);
+            state.licenses = data.licenses || [];
+            renderLicenses();
+            els.statusBar.textContent = `${state.licenses.length} lisans kaydı gösteriliyor.`;
+        }
+
+        async function loadCurrentList() {
+            if (state.mode === 'devices') return loadDevices();
+            return loadLicenses();
+        }
+
+        async function createLicense() {
+            const data = await adminFetch('/api/admin/licenses', {
+                method: 'POST',
+                body: JSON.stringify({})
+            });
+            state.mode = 'licenses';
+            setMode('licenses');
+            await loadLicenses();
+            if (data?.license?.license_key) {
+                await openLicense(data.license.license_key);
+            }
+        }
+
+        async function authenticate() {
+            state.token = els.loginToken.value.trim();
+            if (!state.token) {
+                setLoginError('Admin token gerekli.');
+                return;
+            }
+
+            els.loginBtn.disabled = true;
+            setLoginError('');
+            try {
+                await adminFetch('/api/admin/session');
+                setStoredToken(state.token);
+                setAuthState(true);
+                setMode('devices');
+                await loadCurrentList();
+            } catch {
+                setLoginError('Token doğrulanamadı. Lütfen tekrar dene.');
+                setAuthState(false);
+            } finally {
+                els.loginBtn.disabled = false;
+            }
+        }
+
+        function logout(message = '') {
+            state.token = '';
+            state.devices = [];
+            state.licenses = [];
+            state.selected = null;
+            clearStoredToken();
+            els.loginToken.value = '';
+            els.list.innerHTML = '';
+            els.detail.innerHTML = '<div class="empty">Giriş yapıldıktan sonra kayıtlar burada görünür.</div>';
+            els.deviceCount.textContent = 'Oturum kapalı';
+            els.statusBar.textContent = 'Giriş bekleniyor...';
+            setAuthState(false);
+            setLoginError(message);
+        }
+
+        els.loginBtn.addEventListener('click', authenticate);
+        els.loginToken.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') authenticate();
         });
+        els.refresh.addEventListener('click', async () => {
+            await loadCurrentList();
+        });
+        els.search.addEventListener('keydown', async (event) => {
+            if (event.key === 'Enter') await loadCurrentList();
+        });
+        els.status.addEventListener('change', async () => {
+            await loadCurrentList();
+        });
+        els.logoutBtn.addEventListener('click', () => logout('Oturum kapatıldı.'));
+        els.devicesTab.addEventListener('click', async () => {
+            setMode('devices');
+            await loadCurrentList();
+        });
+        els.licensesTab.addEventListener('click', async () => {
+            setMode('licenses');
+            await loadCurrentList();
+        });
+        els.createLicenseBtn.addEventListener('click', createLicense);
+
+        (async function init() {
+            const stored = localStorage.getItem('registry_admin_token') || '';
+            if (!stored.trim()) {
+                logout('');
+                return;
+            }
+
+            els.loginToken.value = stored.trim();
+            state.token = stored.trim();
+            try {
+                await adminFetch('/api/admin/session');
+                setAuthState(true);
+                setMode('devices');
+                await loadCurrentList();
+            } catch {
+                logout('Kayıtlı token artık geçerli değil. Tekrar giriş yap.');
+            }
+        })();
     </script>
 </body>
 </html>

@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('trackifyDesktop', {
     checkDesktopUpdate: () => ipcRenderer.invoke('desktop:check-desktop-update'),
     downloadDesktopUpdate: () => ipcRenderer.invoke('desktop:download-desktop-update'),
     installDesktopUpdate: () => ipcRenderer.invoke('desktop:install-desktop-update'),
+    applyDesktopUpdate: () => ipcRenderer.invoke('desktop:apply-desktop-update'),
+    setLicenseKey: (value) => ipcRenderer.invoke('desktop:set-license-key', value),
     openDownloadsFolder: () => ipcRenderer.invoke('desktop:open-downloads-folder'),
     setLaunchAtStartup: (enabled) => ipcRenderer.invoke('desktop:set-launch-at-startup', enabled),
     completeOnboarding: () => ipcRenderer.invoke('desktop:complete-onboarding'),

@@ -11,20 +11,31 @@
  */
 
 const API = 'http://localhost:3001/api';
-const REGISTRY_API = 'https://registry.harunhatirkirmaz.com/api';
 const POLL_INTERVAL_MS = 15000; // Faster poll for quicker refresh
 const MIN_WAIT_MS = 1200;
 const MAX_WAIT_MS = 30000;
 const SELECTOR_WAIT_TIMEOUT_MS = 8000;
 const SELECTOR_POLL_MS = 300;
 const SCANNER_IDLE_PARK_MS = 60000;
+const MAX_SCANNER_TABS = 2;
 const DEVICE_ID_KEY = 'trackify_device_id';
 const ACCESS_STATE_KEY = 'trackify_access_state';
+const PRODUCTS_REVISION_KEY = 'trackify_products_revision';
 const ACCESS_REFRESH_ALARM = 'trackify-access-refresh';
 const ACCESS_REFRESH_MINUTES = 1;
 
 let deviceIdCache = null;
 let accessStateCache = { status: 'active', blocked: false, reason: null, blocked_until: null };
+
+async function notifyProductsChanged(reason, productId) {
+    await chrome.storage.local.set({
+        [PRODUCTS_REVISION_KEY]: {
+            reason: String(reason || 'updated'),
+            productId: productId || null,
+            at: Date.now()
+        }
+    });
+}
 
 function parseSelectorList(value) {
     if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean);
@@ -131,34 +142,10 @@ async function apiFetch(path, init = {}) {
     return fetch(`${API}${path}`, { ...init, headers });
 }
 
-async function registryFetch(path, init = {}) {
-    const deviceId = await ensureDeviceId();
-    const headers = new Headers(init.headers || {});
-    headers.set('Content-Type', headers.get('Content-Type') || 'application/json');
-    headers.set('x-trackify-device-id', deviceId);
-    return fetch(`${REGISTRY_API}${path}`, {
-        ...init,
-        headers
-    });
-}
-
 async function refreshDeviceAccess(mode = 'heartbeat') {
-    const deviceId = await ensureDeviceId();
-    const manifest = chrome.runtime.getManifest();
-    const path = mode === 'register'
-        ? '/devices/register'
-        : '/devices/heartbeat';
     try {
-        const res = await registryFetch(path, {
-            method: 'POST',
-            body: JSON.stringify({
-                device_id: deviceId,
-                device_name: `Trackify ${navigator.platform || 'unknown'}`,
-                platform: navigator.platform || 'unknown',
-                user_agent: navigator.userAgent || '',
-                app_version: manifest.version || 'unknown'
-            })
-        });
+        const deviceId = await ensureDeviceId();
+        const res = await fetch(`${API}/device/status?device_id=${encodeURIComponent(deviceId)}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         return await setAccessState({
@@ -168,7 +155,7 @@ async function refreshDeviceAccess(mode = 'heartbeat') {
             blocked_until: data?.blocked_until || null
         });
     } catch (e) {
-        console.error('[PT] Registry access error:', e.message);
+        console.error('[PT] Device access error:', e.message);
         const previousState = await getAccessState();
         const localAppMissing = /masaüstü uygulaması/i.test(String(e?.message || ''));
         return await setAccessState({
@@ -215,37 +202,41 @@ async function pollTasks() {
 }
 
 // ─── Persistent Scanner Tab Management ─────────────────────────────────────────
-let scannerTabId = null;
-let scannerParkTimer = null;
+const scannerSlots = Array.from({ length: MAX_SCANNER_TABS }, () => ({
+    tabId: null,
+    parkTimer: null
+}));
 
-function clearScannerParkTimer() {
-    if (scannerParkTimer) {
-        clearTimeout(scannerParkTimer);
-        scannerParkTimer = null;
+function clearScannerParkTimer(slot) {
+    if (slot.parkTimer) {
+        clearTimeout(slot.parkTimer);
+        slot.parkTimer = null;
     }
 }
 
-async function scheduleScannerParking(tabId) {
-    clearScannerParkTimer();
-    scannerParkTimer = setTimeout(async () => {
+function scheduleScannerParking(slot) {
+    clearScannerParkTimer(slot);
+    if (slot.tabId === null) return;
+    slot.parkTimer = setTimeout(async () => {
         try {
-            await chrome.tabs.update(tabId, { url: 'about:blank', active: false, muted: true });
+            await chrome.tabs.update(slot.tabId, { url: 'about:blank', active: false, muted: true });
         } catch { }
     }, SCANNER_IDLE_PARK_MS);
 }
 
-async function getScannerTab() {
-    clearScannerParkTimer();
+async function getScannerTab(slotIndex) {
+    const slot = scannerSlots[slotIndex];
+    clearScannerParkTimer(slot);
 
-    if (scannerTabId !== null) {
+    if (slot.tabId !== null) {
         try {
-            const tab = await chrome.tabs.get(scannerTabId);
+            const tab = await chrome.tabs.get(slot.tabId);
             try {
-                await chrome.tabs.update(scannerTabId, { pinned: true, active: false, muted: true, autoDiscardable: false });
+                await chrome.tabs.update(slot.tabId, { pinned: true, active: false, muted: true, autoDiscardable: false });
             } catch { }
             return tab.id;
-        } catch (e) {
-            scannerTabId = null;
+        } catch {
+            slot.tabId = null;
         }
     }
 
@@ -261,15 +252,9 @@ async function getScannerTab() {
         active: false,
         pinned: true
     });
-    scannerTabId = tab.id;
-    try { await chrome.tabs.update(scannerTabId, { muted: true, pinned: true, active: false, autoDiscardable: false }); } catch (e) { }
-    return scannerTabId;
-}
-
-async function sequentialScan(tasks) {
-    for (const task of tasks) {
-        await processTask(task).catch(e => console.error('[PT] Task failed:', e));
-    }
+    slot.tabId = tab.id;
+    try { await chrome.tabs.update(slot.tabId, { muted: true, pinned: true, active: false, autoDiscardable: false }); } catch { }
+    return slot.tabId;
 }
 
 function enqueueTasks(tasks) {
@@ -293,19 +278,32 @@ async function processQueue() {
     isProcessingQueue = true;
     chrome.storage.local.set({ status: 'checking' });
 
-    while (scanQueue.length > 0) {
-        const task = scanQueue.shift();
-        try {
-            await processTask(task).catch(e => console.error('[PT] Task failed:', e));
-        } finally {
-            queuedTaskIds.delete(task?.id);
-        }
-    }
+    const workerCount = Math.max(1, Math.min(MAX_SCANNER_TABS, scanQueue.length || 1));
+    await Promise.all(
+        Array.from({ length: workerCount }, (_, slotIndex) => consumeQueue(slotIndex))
+    );
 
     isProcessingQueue = false;
     chrome.storage.local.set({ status: 'connected' });
-    if (scannerTabId !== null) {
-        scheduleScannerParking(scannerTabId);
+    for (const slot of scannerSlots) {
+        scheduleScannerParking(slot);
+    }
+    if (scanQueue.length > 0) {
+        processQueue().catch(e => console.error('[PT] Queue restart error:', e));
+    }
+}
+
+async function consumeQueue(slotIndex) {
+    const tabId = await getScannerTab(slotIndex);
+
+    while (true) {
+        const task = scanQueue.shift();
+        if (!task) break;
+        try {
+            await processTask(task, tabId).catch(e => console.error('[PT] Task failed:', e));
+        } finally {
+            queuedTaskIds.delete(task?.id);
+        }
     }
 }
 
@@ -326,10 +324,10 @@ async function fetchTaskById(productId) {
 
 // ─── Process a Single Task ────────────────────────────────────────────────────
 
-async function processTask(task) {
+async function processTask(task, forcedTabId = null) {
     if (await isDeviceBlocked()) return;
-    console.log(`[PT] Processing in dedicated tab: ${task.url}`);
-    const tabId = await getScannerTab();
+    const tabId = forcedTabId || await getScannerTab(0);
+    console.log(`[PT] Processing in dedicated tab #${tabId}: ${task.url}`);
 
     try {
         await chrome.tabs.update(tabId, { url: task.url });
@@ -438,6 +436,7 @@ async function syncResult(data) {
         const json = await res.json();
         if (json.success) {
             chrome.storage.local.set({ lastSync: Date.now() });
+            await notifyProductsChanged(json.changed ? 'synced_changed' : 'synced', data.productId);
             // Show browser notification for each notification message
             if (json.changed && json.notifications && json.notifications.length > 0) {
                 json.notifications.forEach((notif, i) => {
@@ -546,6 +545,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         });
                     }
                     chrome.storage.local.set({ lastAdded: result.id });
+                    await notifyProductsChanged('created', result.id);
 
                     // Run first scrape immediately after add so card data is available right away.
                     const task = await fetchTaskById(result.id) || {

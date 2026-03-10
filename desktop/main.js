@@ -12,6 +12,8 @@ const DEFAULT_USER_TELEGRAM_BOT_TOKEN = process.env.TRACKIFY_SHARED_TELEGRAM_BOT
 const MAX_LOG_LINES = 200;
 const STATUS_POLL_MS = 15 * 1000;
 const STARTUP_REFRESH_DELAYS = [1500, 5000];
+const LOCAL_APP_AUTH_REFRESH_MS = 30 * 1000;
+const LOCAL_APP_AUTH_TTL_MS = 90 * 1000;
 const rootDir = path.join(__dirname, '..');
 const buildMetaFile = path.join(__dirname, 'build-meta.json');
 
@@ -21,9 +23,11 @@ let isQuitting = false;
 let backendProcess = null;
 let workerProcess = null;
 let statusTimer = null;
+let localAuthTimer = null;
 let logs = [];
 let desktopAccessState = { status: 'unknown', blocked: false, reason: null, blocked_until: null };
 let desktopDevice = null;
+let localAppSessionSecret = crypto.randomBytes(32).toString('hex');
 let extensionUpdateState = { version: null, available: false, checked_at: null, downloadedFile: null };
 let desktopUpdateState = {
     version: null,
@@ -153,6 +157,40 @@ function getRuntimeDataDir() {
     return dir;
 }
 
+function getLocalAppAuthFile() {
+    return path.join(getRuntimeDataDir(), 'local-app-auth.json');
+}
+
+function clearLocalAppAuthFile() {
+    try {
+        fs.rmSync(getLocalAppAuthFile(), { force: true });
+    } catch { }
+}
+
+function refreshLocalAppAuthFile() {
+    const device = ensureDesktopDevice();
+    if (!desktopAccessState?.checked_at || desktopAccessState?.blocked) {
+        clearLocalAppAuthFile();
+        return;
+    }
+
+    const issuedAt = Date.now();
+    const expiresAt = issuedAt + LOCAL_APP_AUTH_TTL_MS;
+    const payload = {
+        device_id: device.device_id,
+        device_name: device.device_name,
+        status: desktopAccessState.status || 'active',
+        blocked: Boolean(desktopAccessState.blocked),
+        checked_at: desktopAccessState.checked_at,
+        issued_at: new Date(issuedAt).toISOString(),
+        expires_at: new Date(expiresAt).toISOString()
+    };
+    const serialized = JSON.stringify(payload);
+    const signature = crypto.createHmac('sha256', localAppSessionSecret).update(serialized).digest('hex');
+
+    fs.writeFileSync(getLocalAppAuthFile(), JSON.stringify({ ...payload, signature }, null, 2));
+}
+
 function getAppRuntimeRoot() {
     return app.isPackaged ? app.getAppPath() : rootDir;
 }
@@ -213,6 +251,7 @@ function writeDesktopPrefs(nextPrefs) {
 function getDesktopPrefs() {
     const prefs = readDesktopPrefs();
     return {
+        licenseKey: String(prefs.licenseKey || '').trim(),
         onboardingCompleted: Boolean(prefs.onboardingCompleted),
         launchAtStartup: Boolean(prefs.launchAtStartup),
         installGuideDismissed: Boolean(prefs.installGuideDismissed),
@@ -221,6 +260,13 @@ function getDesktopPrefs() {
         lastNotifiedDesktopBuildId: prefs.lastNotifiedDesktopBuildId || null,
         lastDownloadedDesktopInstaller: prefs.lastDownloadedDesktopInstaller || null
     };
+}
+
+function normalizeLicenseKey(value) {
+    return String(value || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9-]/g, '');
 }
 
 function compareVersions(a, b) {
@@ -304,6 +350,22 @@ async function fetchJson(url, init) {
 
 async function refreshRegistryAccess(mode = 'heartbeat') {
     const device = ensureDesktopDevice();
+    const prefs = getDesktopPrefs();
+    const licenseKey = normalizeLicenseKey(prefs.licenseKey);
+    if (!licenseKey) {
+        desktopAccessState = {
+            status: 'license_required',
+            blocked: true,
+            reason: 'Lisans anahtarı girilmedi.',
+            blocked_until: null,
+            checked_at: new Date().toISOString(),
+            owner_label: null,
+            license_key: null,
+            license_expires_at: null
+        };
+        clearLocalAppAuthFile();
+        return;
+    }
     const endpoint = mode === 'register' ? '/devices/register' : '/devices/heartbeat';
     try {
         const data = await fetchJson(`${REGISTRY_API}${endpoint}`, {
@@ -317,7 +379,8 @@ async function refreshRegistryAccess(mode = 'heartbeat') {
                 device_name: device.device_name,
                 platform: device.platform,
                 user_agent: `Trackify Desktop / Electron ${process.versions.electron}`,
-                app_version: app.getVersion()
+                app_version: app.getVersion(),
+                license_key: licenseKey
             })
         });
 
@@ -327,7 +390,10 @@ async function refreshRegistryAccess(mode = 'heartbeat') {
             blocked: Boolean(data?.blocked),
             reason: data?.reason || null,
             blocked_until: data?.blocked_until || null,
-            checked_at: new Date().toISOString()
+            checked_at: new Date().toISOString(),
+            owner_label: data?.owner_label || null,
+            license_key: data?.license_key || licenseKey,
+            license_expires_at: data?.license_expires_at || null
         };
 
         if (desktopAccessState.blocked && !wasBlocked) {
@@ -335,6 +401,7 @@ async function refreshRegistryAccess(mode = 'heartbeat') {
                 title: 'Trackify erişimi kapatıldı',
                 body: desktopAccessState.reason || 'Bu masaüstü cihaz registry tarafında engellendi.'
             }).show();
+            clearLocalAppAuthFile();
             await stopManagedServices();
         }
 
@@ -344,6 +411,8 @@ async function refreshRegistryAccess(mode = 'heartbeat') {
                 body: 'Masaüstü cihaz tekrar aktif duruma geçti.'
             }).show();
         }
+
+        refreshLocalAppAuthFile();
     } catch (error) {
         desktopAccessState = {
             ...desktopAccessState,
@@ -351,6 +420,7 @@ async function refreshRegistryAccess(mode = 'heartbeat') {
             checked_at: new Date().toISOString(),
             error: error.message
         };
+        refreshLocalAppAuthFile();
         pushLog('registry', `Erişim kontrol hatası: ${error.message}`);
     }
 }
@@ -566,18 +636,42 @@ async function downloadDesktopUpdate() {
     return targetPath;
 }
 
-async function installDesktopUpdate() {
+async function installDesktopUpdate(explicitInstallerPath = null) {
     const prefs = getDesktopPrefs();
-    const installerPath = desktopUpdateState?.downloadedFile || prefs.lastDownloadedDesktopInstaller;
+    const installerPath = explicitInstallerPath || desktopUpdateState?.downloadedFile || prefs.lastDownloadedDesktopInstaller;
     if (!installerPath || !fs.existsSync(installerPath)) {
         throw new Error('Önce masaüstü güncellemesini indir.');
     }
 
-    const installDir = app.isPackaged ? path.dirname(process.execPath) : null;
-    const installerArgs = ['/S'];
-    if (installDir && process.platform === 'win32') {
-        installerArgs.push(`/D=${installDir}`);
+    if (process.platform !== 'win32' || !app.isPackaged) {
+        await shell.openPath(installerPath);
+        return installerPath;
     }
+
+    const installDir = path.dirname(process.execPath);
+    const appExePath = process.execPath;
+    const scriptPath = path.join(os.tmpdir(), `trackify-update-${Date.now()}.ps1`);
+    const escapedInstallerPath = installerPath.replace(/'/g, "''");
+    const escapedInstallDir = installDir.replace(/'/g, "''");
+    const escapedAppExePath = appExePath.replace(/'/g, "''");
+    const helperScript = [
+        "$ErrorActionPreference = 'SilentlyContinue'",
+        "Start-Sleep -Seconds 2",
+        `$installer = '${escapedInstallerPath}'`,
+        `$installDir = '${escapedInstallDir}'`,
+        `$appExe = '${escapedAppExePath}'`,
+        "if (Test-Path $installer) {",
+        "  Start-Process -FilePath $installer -ArgumentList @('/S', ('/D=' + $installDir)) -Wait",
+        "}",
+        "Start-Sleep -Seconds 2",
+        "if (Test-Path $appExe) {",
+        "  Start-Process -FilePath $appExe",
+        "}",
+        "if (Test-Path $installer) { Remove-Item -LiteralPath $installer -Force }",
+        `if (Test-Path '${scriptPath.replace(/'/g, "''")}') { Remove-Item -LiteralPath '${scriptPath.replace(/'/g, "''")}' -Force }`
+    ].join('\r\n');
+
+    fs.writeFileSync(scriptPath, helperScript, 'utf8');
 
     desktopUpdateState = {
         ...desktopUpdateState,
@@ -586,16 +680,28 @@ async function installDesktopUpdate() {
     };
     await publishState();
 
-    spawn(installerPath, installerArgs, {
+    spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], {
         detached: true,
         stdio: 'ignore'
     }).unref();
 
-    pushLog('desktop-update', `Sessiz güncelleme başlatıldı: ${path.basename(installerPath)}`);
+    pushLog('desktop-update', `Sessiz güncelleme ve yeniden açma akışı başlatıldı: ${path.basename(installerPath)}`);
     isQuitting = true;
     await stopManagedServices();
     app.quit();
     return installerPath;
+}
+
+async function applyDesktopUpdate() {
+    if (!desktopUpdateState?.available && !desktopUpdateState?.downloadedFile) {
+        await checkDesktopUpdate();
+    }
+
+    const installerPath = desktopUpdateState?.downloadedFile && fs.existsSync(desktopUpdateState.downloadedFile)
+        ? desktopUpdateState.downloadedFile
+        : await downloadDesktopUpdate();
+
+    return installDesktopUpdate(installerPath);
 }
 
 function getProcessDescriptor(kind) {
@@ -630,6 +736,8 @@ async function startBackendProcess() {
         ...process.env,
         TRACKIFY_DB_DIR: getRuntimeDataDir(),
         TRACKIFY_SCHEMA_PATH: getRuntimeSchemaPath(),
+        TRACKIFY_LOCAL_APP_AUTH_FILE: getLocalAppAuthFile(),
+        TRACKIFY_LOCAL_APP_SESSION_SECRET: localAppSessionSecret,
         TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || DEFAULT_USER_TELEGRAM_BOT_TOKEN
     };
     const command = app.isPackaged ? process.execPath : process.execPath;
@@ -654,6 +762,8 @@ async function startWorkerProcess() {
         ...process.env,
         TRACKIFY_DB_DIR: getRuntimeDataDir(),
         TRACKIFY_SCHEMA_PATH: getRuntimeSchemaPath(),
+        TRACKIFY_LOCAL_APP_AUTH_FILE: getLocalAppAuthFile(),
+        TRACKIFY_LOCAL_APP_SESSION_SECRET: localAppSessionSecret,
         TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || DEFAULT_USER_TELEGRAM_BOT_TOKEN
     };
     const command = app.isPackaged ? process.execPath : process.execPath;
@@ -673,6 +783,7 @@ async function startWorkerProcess() {
 }
 
 async function stopManagedServices() {
+    clearLocalAppAuthFile();
     for (const proc of [workerProcess, backendProcess]) {
         if (!proc || proc.killed) continue;
         proc.kill('SIGTERM');
@@ -680,6 +791,10 @@ async function stopManagedServices() {
 }
 
 async function startManagedServices() {
+    if (!normalizeLicenseKey(getDesktopPrefs().licenseKey)) {
+        pushLog('desktop', 'Servisler başlatılmadı: lisans anahtarı girilmedi.');
+        return;
+    }
     if (desktopAccessState.blocked) {
         pushLog('desktop', 'Servisler başlatılmadı: cihaz engelli.');
         return;
@@ -762,7 +877,7 @@ function createTray() {
     });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
     const gotLock = app.requestSingleInstanceLock();
     if (!gotLock) {
         app.quit();
@@ -772,7 +887,8 @@ app.whenReady().then(() => {
     createWindow();
     createTray();
     ensureDesktopDevice();
-    refreshRegistryAccess('register').catch(() => { });
+    await refreshRegistryAccess('register').catch(() => { });
+    refreshLocalAppAuthFile();
     checkExtensionUpdate().catch(() => { });
     checkDesktopUpdate().catch(() => { });
     startManagedServices().catch((error) => pushLog('desktop', `Başlangıç hatası: ${error.message}`));
@@ -782,6 +898,9 @@ app.whenReady().then(() => {
         checkDesktopUpdate().catch(() => { });
         publishState().catch(() => { });
     }, STATUS_POLL_MS);
+    localAuthTimer = setInterval(() => {
+        refreshLocalAppAuthFile();
+    }, LOCAL_APP_AUTH_REFRESH_MS);
     publishState().catch(() => { });
     scheduleStateRefresh([1000, 3000, 8000]);
 });
@@ -789,6 +908,8 @@ app.whenReady().then(() => {
 app.on('before-quit', () => {
     isQuitting = true;
     if (statusTimer) clearInterval(statusTimer);
+    if (localAuthTimer) clearInterval(localAuthTimer);
+    clearLocalAppAuthFile();
 });
 
 app.on('window-all-closed', (event) => {
@@ -830,8 +951,21 @@ ipcMain.handle('desktop:install-desktop-update', async () => {
     await installDesktopUpdate();
     return collectState();
 });
+ipcMain.handle('desktop:apply-desktop-update', async () => {
+    await applyDesktopUpdate();
+    return collectState();
+});
 ipcMain.handle('desktop:set-launch-at-startup', async (_event, enabled) => {
     setLaunchAtStartup(Boolean(enabled));
+    return collectState();
+});
+ipcMain.handle('desktop:set-license-key', async (_event, rawLicenseKey) => {
+    const licenseKey = normalizeLicenseKey(rawLicenseKey);
+    updateDesktopPrefs({ licenseKey });
+    await refreshRegistryAccess('register');
+    if (!desktopAccessState.blocked) {
+        await startManagedServices();
+    }
     return collectState();
 });
 ipcMain.handle('desktop:complete-onboarding', async () => {

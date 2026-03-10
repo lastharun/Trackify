@@ -18,6 +18,7 @@ export function initRegistryDb() {
     registryDb.exec(fs.readFileSync(schemaPath, 'utf8'));
 
     const migrations = [
+        `ALTER TABLE devices ADD COLUMN license_key TEXT`,
         `ALTER TABLE devices ADD COLUMN owner_label TEXT`,
         `ALTER TABLE devices ADD COLUMN device_name TEXT`,
         `ALTER TABLE devices ADD COLUMN platform TEXT`,
@@ -36,6 +37,24 @@ export function initRegistryDb() {
         try { registryDb.prepare(sql).run(); } catch { }
     }
 
+    const licenseMigrations = [
+        `ALTER TABLE licenses ADD COLUMN owner_label TEXT`,
+        `ALTER TABLE licenses ADD COLUMN status TEXT DEFAULT 'active'`,
+        `ALTER TABLE licenses ADD COLUMN expires_at DATETIME`,
+        `ALTER TABLE licenses ADD COLUMN bound_device_id TEXT`,
+        `ALTER TABLE licenses ADD COLUMN notes TEXT`,
+        `ALTER TABLE licenses ADD COLUMN max_devices INTEGER NOT NULL DEFAULT 1`,
+        `ALTER TABLE licenses ADD COLUMN last_activated_at DATETIME`,
+        `ALTER TABLE licenses ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP`,
+        `ALTER TABLE licenses ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP`
+    ];
+
+    for (const sql of licenseMigrations) {
+        try { registryDb.prepare(sql).run(); } catch { }
+    }
+
     registryDb.prepare(`CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen_at DESC)`).run();
     registryDb.prepare(`CREATE INDEX IF NOT EXISTS idx_device_events_device_id ON device_events(device_id, created_at DESC)`).run();
+    registryDb.prepare(`CREATE INDEX IF NOT EXISTS idx_devices_license_key ON devices(license_key)`).run();
+    registryDb.prepare(`CREATE INDEX IF NOT EXISTS idx_licenses_status ON licenses(status, expires_at)`).run();
 }

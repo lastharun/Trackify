@@ -82,6 +82,17 @@ body {
     box-shadow: 0 24px 64px rgba(2, 8, 23, 0.32);
 }
 
+.sidebar-panel input[type="text"] {
+    width: 100%;
+    margin-top: 10px;
+    border: 1px solid var(--line);
+    background: rgba(15, 24, 46, 0.9);
+    color: var(--text);
+    border-radius: 14px;
+    padding: 12px 14px;
+    font: inherit;
+}
+
 .sidebar-panel {
     padding: 18px;
     margin-bottom: 16px;

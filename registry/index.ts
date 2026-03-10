@@ -2,6 +2,7 @@ import axios from 'axios';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { initRegistryDb, registryDb } from './db';
@@ -28,6 +29,7 @@ const desktopUpdateManifestPath = path.join(updatesDir, 'desktop.json');
 let lastTelegramUpdateId = 0;
 
 type DeviceStatus = 'active' | 'temp_block' | 'perm_block';
+type LicenseStatus = 'active' | 'disabled';
 
 function nowIso() {
     return new Date().toISOString();
@@ -59,6 +61,7 @@ function getClientIp(req: express.Request) {
 function sanitizeDevice(input: any) {
     return {
         device_id: String(input?.device_id || '').trim(),
+        license_key: normalizeLicenseKey(input?.license_key),
         owner_label: String(input?.owner_label || '').trim() || null,
         device_name: String(input?.device_name || '').trim() || null,
         platform: String(input?.platform || '').trim() || null,
@@ -68,8 +71,96 @@ function sanitizeDevice(input: any) {
     };
 }
 
+function normalizeLicenseKey(input: any) {
+    return String(input || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9-]/g, '');
+}
+
+function generateLicenseKey() {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const bytes = crypto.randomBytes(12);
+    const raw = Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
+    return raw.match(/.{1,4}/g)?.join('-') || raw;
+}
+
+function getLicense(licenseKey: string) {
+    return registryDb.prepare(`SELECT * FROM licenses WHERE license_key = ?`).get(normalizeLicenseKey(licenseKey)) as any;
+}
+
 function getDevice(deviceId: string) {
     return registryDb.prepare(`SELECT * FROM devices WHERE device_id = ?`).get(deviceId) as any;
+}
+
+function getEffectiveLicenseStatus(license: any) {
+    if (!license) {
+        return { status: 'missing', active: false, reason: 'Lisans anahtarı bulunamadı.' };
+    }
+
+    if (String(license.status || 'active') !== 'active') {
+        return { status: 'disabled', active: false, reason: 'Bu lisans devre dışı bırakıldı.' };
+    }
+
+    const expiresAt = parseDbDate(license.expires_at);
+    if (expiresAt && expiresAt.getTime() < Date.now()) {
+        return { status: 'expired', active: false, reason: 'Bu lisansın süresi dolmuş.' };
+    }
+
+    return { status: 'active', active: true, reason: null };
+}
+
+function ensureLicenseBinding(deviceId: string, providedLicenseKey: string | null, existingDevice?: any) {
+    const normalizedKey = normalizeLicenseKey(providedLicenseKey || existingDevice?.license_key || '');
+    if (!normalizedKey) {
+        return {
+            ok: false,
+            error: 'LICENSE_REQUIRED',
+            reason: 'Lisans anahtarı girilmedi.'
+        };
+    }
+
+    const license = getLicense(normalizedKey);
+    const effective = getEffectiveLicenseStatus(license);
+    if (!effective.active) {
+        return {
+            ok: false,
+            error: effective.status === 'expired' ? 'LICENSE_EXPIRED' : 'LICENSE_INVALID',
+            reason: effective.reason,
+            license
+        };
+    }
+
+    if (license.bound_device_id && license.bound_device_id !== deviceId) {
+        return {
+            ok: false,
+            error: 'LICENSE_IN_USE',
+            reason: `Bu lisans başka bir cihazda aktif: ${license.bound_device_id}`,
+            license
+        };
+    }
+
+    if (!license.bound_device_id) {
+        registryDb.prepare(`
+            UPDATE licenses
+            SET bound_device_id = ?,
+                last_activated_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE license_key = ?
+        `).run(deviceId, normalizedKey);
+    } else {
+        registryDb.prepare(`
+            UPDATE licenses
+            SET last_activated_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE license_key = ?
+        `).run(normalizedKey);
+    }
+
+    return {
+        ok: true,
+        license: getLicense(normalizedKey)
+    };
 }
 
 function getEffectiveStatus(device: any) {
@@ -133,16 +224,32 @@ function upsertDevice(input: any, req?: express.Request) {
     if (!device.device_id) throw new Error('device_id is required');
 
     const existing = getDevice(device.device_id);
+    const licenseBinding = ensureLicenseBinding(device.device_id, device.license_key, existing);
+    if (!licenseBinding.ok) {
+        return {
+            device: existing || null,
+            isNew: false,
+            access: {
+                status: licenseBinding.error === 'LICENSE_EXPIRED' ? 'license_expired' : 'license_required',
+                blocked: true,
+                reason: licenseBinding.reason,
+                blocked_until: licenseBinding.license?.expires_at || null
+            }
+        };
+    }
+
+    const license = licenseBinding.license;
     const isNew = !existing;
     const clientIp = getClientIp(req || ({} as express.Request));
 
     registryDb.prepare(`
         INSERT INTO devices (
-            device_id, owner_label, device_name, platform, user_agent, app_version, last_ip, meta_json,
+            device_id, license_key, owner_label, device_name, platform, user_agent, app_version, last_ip, meta_json, license_expires_at,
             status, last_seen_at, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT(device_id) DO UPDATE SET
+            license_key = COALESCE(excluded.license_key, devices.license_key),
             owner_label = COALESCE(excluded.owner_label, devices.owner_label),
             device_name = COALESCE(excluded.device_name, devices.device_name),
             platform = COALESCE(excluded.platform, devices.platform),
@@ -150,20 +257,24 @@ function upsertDevice(input: any, req?: express.Request) {
             app_version = COALESCE(excluded.app_version, devices.app_version),
             last_ip = COALESCE(excluded.last_ip, devices.last_ip),
             meta_json = COALESCE(excluded.meta_json, devices.meta_json),
+            license_expires_at = COALESCE(excluded.license_expires_at, devices.license_expires_at),
             last_seen_at = CURRENT_TIMESTAMP,
             updated_at = CURRENT_TIMESTAMP
     `).run(
         device.device_id,
-        device.owner_label,
+        license.license_key,
+        device.owner_label || license.owner_label || null,
         device.device_name,
         device.platform,
         device.user_agent,
         device.app_version,
         clientIp,
-        device.meta_json
+        device.meta_json,
+        license.expires_at || null
     );
 
     logDeviceEvent(device.device_id, isNew ? 'register' : 'heartbeat', {
+        license_key: license.license_key,
         owner_label: device.owner_label,
         device_name: device.device_name,
         platform: device.platform,
@@ -172,7 +283,11 @@ function upsertDevice(input: any, req?: express.Request) {
         at: nowIso()
     });
 
-    return { device: getDevice(device.device_id), isNew };
+    return {
+        device: getDevice(device.device_id),
+        isNew,
+        access: getEffectiveStatus(getDevice(device.device_id))
+    };
 }
 
 function listDevices(filters: { limit?: number; search?: string; status?: string; online_hours?: number }) {
@@ -182,12 +297,13 @@ function listDevices(filters: { limit?: number; search?: string; status?: string
     if (filters.search) {
         where.push(`(
             device_id LIKE ?
+            OR COALESCE(license_key, '') LIKE ?
             OR COALESCE(owner_label, '') LIKE ?
             OR COALESCE(device_name, '') LIKE ?
             OR COALESCE(platform, '') LIKE ?
         )`);
         const like = `%${filters.search}%`;
-        params.push(like, like, like, like);
+        params.push(like, like, like, like, like);
     }
 
     if (filters.status === 'online') {
@@ -201,7 +317,7 @@ function listDevices(filters: { limit?: number; search?: string; status?: string
 
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
     return registryDb.prepare(`
-        SELECT device_id, owner_label, device_name, platform, user_agent, app_version, last_ip,
+        SELECT device_id, license_key, owner_label, device_name, platform, user_agent, app_version, last_ip,
                status, license_expires_at, blocked_until, reason, meta_json, last_seen_at, created_at, updated_at
         FROM devices
         ${clause}
@@ -298,6 +414,114 @@ function updateDeviceMeta(deviceId: string, payload: any) {
         status: payload.status,
         at: nowIso()
     });
+}
+
+function listLicenses(filters: { limit?: number; search?: string; status?: string }) {
+    const where: string[] = [];
+    const params: any[] = [];
+
+    if (filters.search) {
+        const like = `%${filters.search}%`;
+        where.push(`(
+            license_key LIKE ?
+            OR COALESCE(owner_label, '') LIKE ?
+            OR COALESCE(bound_device_id, '') LIKE ?
+            OR COALESCE(notes, '') LIKE ?
+        )`);
+        params.push(like, like, like, like);
+    }
+
+    if (filters.status === 'bound') {
+        where.push(`bound_device_id IS NOT NULL AND TRIM(bound_device_id) <> ''`);
+    } else if (filters.status === 'unbound') {
+        where.push(`bound_device_id IS NULL OR TRIM(bound_device_id) = ''`);
+    } else if (filters.status) {
+        where.push(`status = ?`);
+        params.push(filters.status);
+    }
+
+    const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    return registryDb.prepare(`
+        SELECT *
+        FROM licenses
+        ${clause}
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT ?
+    `).all(...params, Number(filters.limit || 200)) as any[];
+}
+
+function createLicense(payload: any) {
+    const licenseKey = normalizeLicenseKey(payload?.license_key) || generateLicenseKey();
+    const ownerLabel = String(payload?.owner_label || '').trim() || null;
+    const expiresAt = String(payload?.expires_at || '').trim() || null;
+    const notes = String(payload?.notes || '').trim() || null;
+    const status = String(payload?.status || 'active').trim() === 'disabled' ? 'disabled' : 'active';
+    const maxDevices = Math.max(1, Number(payload?.max_devices || 1) || 1);
+
+    registryDb.prepare(`
+        INSERT INTO licenses (license_key, owner_label, status, expires_at, notes, max_devices, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(licenseKey, ownerLabel, status, expiresAt, notes, maxDevices);
+
+    return getLicense(licenseKey);
+}
+
+function updateLicense(licenseKey: string, payload: any) {
+    const normalizedKey = normalizeLicenseKey(licenseKey);
+    const updates: string[] = [];
+    const params: any[] = [];
+
+    if ('owner_label' in payload) {
+        updates.push('owner_label = ?');
+        params.push(String(payload.owner_label || '').trim() || null);
+    }
+    if ('expires_at' in payload) {
+        updates.push('expires_at = ?');
+        params.push(String(payload.expires_at || '').trim() || null);
+    }
+    if ('notes' in payload) {
+        updates.push('notes = ?');
+        params.push(String(payload.notes || '').trim() || null);
+    }
+    if ('status' in payload) {
+        updates.push('status = ?');
+        params.push(String(payload.status || 'active').trim() === 'disabled' ? 'disabled' : 'active');
+    }
+    if ('max_devices' in payload) {
+        updates.push('max_devices = ?');
+        params.push(Math.max(1, Number(payload.max_devices || 1) || 1));
+    }
+    if (!updates.length) return getLicense(normalizedKey);
+
+    registryDb.prepare(`
+        UPDATE licenses
+        SET ${updates.join(', ')},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE license_key = ?
+    `).run(...params, normalizedKey);
+
+    const license = getLicense(normalizedKey);
+    if (license) {
+        registryDb.prepare(`
+            UPDATE devices
+            SET owner_label = COALESCE(?, owner_label),
+                license_expires_at = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE license_key = ?
+        `).run(license.owner_label || null, license.expires_at || null, normalizedKey);
+    }
+
+    return license;
+}
+
+function resetLicenseBinding(licenseKey: string) {
+    const normalizedKey = normalizeLicenseKey(licenseKey);
+    registryDb.prepare(`
+        UPDATE licenses
+        SET bound_device_id = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE license_key = ?
+    `).run(normalizedKey);
 }
 
 function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -452,10 +676,9 @@ app.get('/api/updates/desktop', (_req, res) => {
 
 app.post('/api/devices/register', async (req, res) => {
     try {
-        const { device, isNew } = upsertDevice(req.body || {}, req);
-        const access = getEffectiveStatus(device);
+        const { device, isNew, access } = upsertDevice(req.body || {}, req);
 
-        if (isNew) {
+        if (isNew && device) {
             await sendTelegram(
                 `🆕 <b>Yeni cihaz kaydoldu</b>\n\n` +
                 `ID: <code>${device.device_id}</code>\n` +
@@ -468,13 +691,14 @@ app.post('/api/devices/register', async (req, res) => {
 
         res.json({
             success: true,
-            device_id: device.device_id,
+            device_id: device?.device_id || String(req.body?.device_id || '').trim() || null,
             status: access.status,
             blocked: access.blocked,
             blocked_until: access.blocked_until,
             reason: access.reason,
-            owner_label: device.owner_label,
-            license_expires_at: device.license_expires_at || null
+            owner_label: device?.owner_label || null,
+            license_expires_at: device?.license_expires_at || access.blocked_until || null,
+            license_key: device?.license_key || normalizeLicenseKey(req.body?.license_key)
         });
     } catch (err: any) {
         res.status(400).json({ error: err.message });
@@ -483,17 +707,17 @@ app.post('/api/devices/register', async (req, res) => {
 
 app.post('/api/devices/heartbeat', (req, res) => {
     try {
-        const { device } = upsertDevice(req.body || {}, req);
-        const access = getEffectiveStatus(device);
+        const { device, access } = upsertDevice(req.body || {}, req);
         res.json({
             success: true,
-            device_id: device.device_id,
+            device_id: device?.device_id || String(req.body?.device_id || '').trim() || null,
             status: access.status,
             blocked: access.blocked,
             blocked_until: access.blocked_until,
             reason: access.reason,
-            owner_label: device.owner_label,
-            license_expires_at: device.license_expires_at || null
+            owner_label: device?.owner_label || null,
+            license_expires_at: device?.license_expires_at || access.blocked_until || null,
+            license_key: device?.license_key || normalizeLicenseKey(req.body?.license_key)
         });
     } catch (err: any) {
         res.status(400).json({ error: err.message });
@@ -533,6 +757,10 @@ app.get('/api/admin/devices', requireAdmin, (req, res) => {
     }
 });
 
+app.get('/api/admin/session', requireAdmin, (_req, res) => {
+    res.json({ ok: true });
+});
+
 app.get('/api/admin/devices/:deviceId', requireAdmin, (req, res) => {
     try {
         const deviceId = String(req.params.deviceId || '').trim();
@@ -547,6 +775,22 @@ app.get('/api/admin/devices/:deviceId', requireAdmin, (req, res) => {
             },
             events: getDeviceEvents(deviceId, 50)
         });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/admin/devices/:deviceId', requireAdmin, (req, res) => {
+    try {
+        const deviceId = String(req.params.deviceId || '').trim();
+        if (!deviceId) return res.status(400).json({ error: 'device_id is required' });
+
+        const existing = getDevice(deviceId);
+        if (!existing) return res.status(404).json({ error: 'not found' });
+
+        registryDb.prepare(`UPDATE licenses SET bound_device_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE bound_device_id = ?`).run(deviceId);
+        registryDb.prepare(`DELETE FROM devices WHERE device_id = ?`).run(deviceId);
+        res.json({ success: true, device_id: deviceId });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }
@@ -581,6 +825,59 @@ app.post('/api/admin/devices/:deviceId/block', requireAdmin, (req, res) => {
 app.post('/api/admin/devices/:deviceId/unblock', requireAdmin, (req, res) => {
     try {
         unblockDevice(String(req.params.deviceId || '').trim());
+        res.json({ success: true });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/admin/licenses', requireAdmin, (req, res) => {
+    try {
+        const licenses = listLicenses({
+            limit: Number(req.query.limit || 200),
+            search: String(req.query.search || '').trim() || undefined,
+            status: String(req.query.status || '').trim() || undefined
+        });
+        res.json({ licenses });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/licenses', requireAdmin, (req, res) => {
+    try {
+        const license = createLicense(req.body || {});
+        res.status(201).json({ success: true, license });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/admin/licenses/:licenseKey', requireAdmin, (req, res) => {
+    try {
+        const licenseKey = normalizeLicenseKey(req.params.licenseKey);
+        const license = getLicense(licenseKey);
+        if (!license) return res.status(404).json({ error: 'not found' });
+        const device = license.bound_device_id ? getDevice(license.bound_device_id) : null;
+        res.json({ license, device });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.patch('/api/admin/licenses/:licenseKey', requireAdmin, (req, res) => {
+    try {
+        const license = updateLicense(String(req.params.licenseKey || ''), req.body || {});
+        if (!license) return res.status(404).json({ error: 'not found' });
+        res.json({ success: true, license });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/licenses/:licenseKey/reset-device', requireAdmin, (req, res) => {
+    try {
+        resetLicenseBinding(String(req.params.licenseKey || ''));
         res.json({ success: true });
     } catch (err: any) {
         res.status(500).json({ error: err.message });

@@ -73,6 +73,13 @@
             </div>
 
             <div class="sidebar-panel">
+                <div class="panel-label">Lisans Aktivasyonu</div>
+                <input id="license-key-input" type="text" placeholder="XXXX-XXXX-XXXX" />
+                <button id="save-license-key" class="ghost-btn" style="margin-top:10px;">Lisansı kaydet</button>
+                <div id="license-hint" class="panel-copy">Size verilen lisans anahtarını girip etkinleştirin.</div>
+            </div>
+
+            <div class="sidebar-panel">
                 <div class="panel-label">Windows Başlangıcı</div>
                 <label class="check-row compact">
                     <input id="launch-at-startup" type="checkbox" />
@@ -159,14 +166,13 @@
                     <div class="card-label">Masaüstü Güncellemesi</div>
                     <div class="button-row">
                         <button id="check-desktop-update" class="primary-btn">Masaüstü güncellemesini kontrol et</button>
-                        <button id="download-desktop-update" class="ghost-btn">Kurulum dosyasını indir</button>
-                        <button id="install-desktop-update" class="ghost-btn">Güncellemeyi uygula</button>
+                        <button id="apply-desktop-update" class="ghost-btn">İndir ve uygula</button>
                     </div>
                     <div class="progress-row">
                         <progress id="desktop-update-progress" max="100" value="0"></progress>
                         <span id="desktop-update-progress-label" class="progress-label">Bekliyor</span>
                     </div>
-                    <div id="desktop-update-hint" class="hint">Yeni Windows kurulum dosyası bulunduğunda Downloads klasörüne indirilebilir.</div>
+                    <div id="desktop-update-hint" class="hint">Yeni sürüm bulunduğunda uygulama paketi arka planda indirip aynı klasöre sessizce uygular.</div>
                 </div>
 
                 <div class="control-card">

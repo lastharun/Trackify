@@ -1,4 +1,5 @@
 const API = 'http://localhost:3001/api';
+const PRODUCTS_REVISION_KEY = 'trackify_products_revision';
 let currentTab = null;
 let detectedInfo = null;
 let manualSelectorMode = false;
@@ -13,6 +14,16 @@ window.fetch = async (input, init = {}) => {
     if (stored?.trackify_device_id) headers.set('x-trackify-device-id', stored.trackify_device_id);
     return nativeFetch(input, { ...init, headers });
 };
+
+async function notifyProductsChanged(reason, productId) {
+    await chrome.storage.local.set({
+        [PRODUCTS_REVISION_KEY]: {
+            reason: String(reason || 'updated'),
+            productId: productId || null,
+            at: Date.now()
+        }
+    });
+}
 
 function renderBlockedOverlay(state) {
     if (!state?.blocked) return;
@@ -177,6 +188,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (data.id) {
                             btn.textContent = '✅';
                             btn.style.background = '#10b981';
+                            await notifyProductsChanged(data.appended ? 'selector-appended' : 'created', data.id);
                             if (data.appended) {
                                 showToast('✅ Alan mevcut takibe eklendi!');
                             }
@@ -329,6 +341,7 @@ async function quickTrack(info) {
         });
         const result = await res.json();
         if (result.id) {
+            await notifyProductsChanged(result.appended ? 'selector-appended' : 'created', result.id);
             showToast(result.appended ? '✅ Alan mevcut takibe eklendi!' : '✅ Takip kaydedildi!');
             document.getElementById('btn-main').style.display = 'none';
         } else {
@@ -377,6 +390,7 @@ async function trackWithSelector() {
         });
         const data = await res.json();
         if (data.id) {
+            await notifyProductsChanged(data.appended ? 'selector-appended' : 'created', data.id);
             showToast(data.appended ? '✅ Seçici mevcut takibe eklendi!' : '✅ Takip kaydedildi!');
         } else {
             setStatus('❌ ' + (data.error || 'Kayıt hatası'));

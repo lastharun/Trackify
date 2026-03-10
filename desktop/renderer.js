@@ -72,6 +72,7 @@ function toggleHidden(id, hidden) {
 function renderState(state) {
     $('device-name').textContent = state.desktopDevice?.device_name || 'Trackify Desktop';
     $('device-id').textContent = `Device ID: ${state.desktopDevice?.device_id || '-'}`;
+    $('license-key-input').value = state.preferences?.licenseKey || '';
     $('launch-at-startup').checked = Boolean(state.preferences?.launchAtStartup);
     $('onboarding-launch-checkbox').checked = Boolean(state.preferences?.launchAtStartup);
     $('launch-at-startup').disabled = state.preferences?.platform !== 'win32';
@@ -102,8 +103,11 @@ function renderState(state) {
     const accessState = mapAccessState(state.access);
     const accessDetail = state.access?.blocked
         ? `${state.access.reason || 'Bu cihaz bloke edildi'}${state.access.blocked_until ? ` | Bitis: ${formatTime(state.access.blocked_until)}` : ''}`
-        : `Durum: ${state.access?.status || 'bilinmiyor'} | Son görülme: ${formatTime(state.access?.checked_at)}`;
+        : `Durum: ${state.access?.status || 'bilinmiyor'} | Musteri: ${state.access?.owner_label || '-'} | Son görülme: ${formatTime(state.access?.checked_at)}`;
     setStatus('access-status', 'access-detail', accessState, accessDetail);
+    $('license-hint').textContent = state.access?.license_key
+        ? `Aktif lisans: ${state.access.license_key}${state.access?.license_expires_at ? ` | Bitiş: ${formatTime(state.access.license_expires_at)}` : ''}`
+        : 'Size verilen lisans anahtarını girip etkinleştirin.';
 
     const extensionState = mapExtensionUpdate(state.extensionUpdate);
     const extensionDetail = state.extensionUpdate?.available
@@ -117,9 +121,9 @@ function renderState(state) {
 
     const desktopUpdateState = mapDesktopUpdate(state.desktopUpdate);
     const desktopUpdateDetail = state.desktopUpdate?.installing
-        ? 'Sessiz güncelleme başlatıldı. Uygulama kapanıp aynı klasöre güncel sürüm kurulacak.'
+        ? 'Paket indirildi. Uygulama kapanıp aynı klasöre sessiz güncelleme kuruluyor; işlem bitince uygulama yeniden açılacak.'
         : state.desktopUpdate?.downloading
-            ? `Kurulum dosyası indiriliyor: %${state.desktopUpdate.downloadProgress || 0}`
+            ? `Yeni sürüm indiriliyor: %${state.desktopUpdate.downloadProgress || 0}`
         : state.desktopUpdate?.available
         ? `Yeni masaüstü paketi ${state.desktopUpdate.version} hazır. Build: ${String(state.desktopUpdate.build_id || '-').slice(0, 8)}`
         : (state.desktopUpdate?.version
@@ -130,8 +134,8 @@ function renderState(state) {
     $('desktop-update-hint').textContent = state.desktopUpdate?.downloading
         ? `İndirilen: ${state.desktopUpdate.downloadBytes || 0} / ${state.desktopUpdate.downloadTotalBytes || 0} bayt`
         : state.desktopUpdate?.downloadedFile
-        ? `Son indirilen kurulum: ${state.desktopUpdate.downloadedFile}`
-        : 'Yeni Windows kurulum dosyası bulunduğunda Downloads klasörüne indirilebilir.';
+        ? `Hazır paket: ${state.desktopUpdate.downloadedFile}`
+        : 'Yeni sürüm bulunduğunda tek butonla indirip aynı klasöre uygulayabilirsin.';
     $('desktop-update-progress').value = Number(state.desktopUpdate?.downloadProgress || 0);
     $('desktop-update-progress-label').textContent = state.desktopUpdate?.downloading
         ? `%${state.desktopUpdate.downloadProgress || 0}`
@@ -195,6 +199,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!state.desktopDevice?.device_id) return;
         await window.trackifyDesktop.copyText(state.desktopDevice.device_id);
     });
+    $('save-license-key').addEventListener('click', async () => {
+        const value = $('license-key-input').value.trim();
+        await window.trackifyDesktop.setLicenseKey(value);
+        await refreshState();
+    });
 
     $('open-local-api').addEventListener('click', () => window.trackifyDesktop.openExternal('http://127.0.0.1:3001/health'));
     $('launch-at-startup').addEventListener('change', async (event) => {
@@ -213,12 +222,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         await window.trackifyDesktop.checkDesktopUpdate();
         await refreshState();
     });
-    $('download-desktop-update').addEventListener('click', async () => {
-        await window.trackifyDesktop.downloadDesktopUpdate();
-        await refreshState();
-    });
-    $('install-desktop-update').addEventListener('click', async () => {
-        await window.trackifyDesktop.installDesktopUpdate();
+    $('apply-desktop-update').addEventListener('click', async () => {
+        await window.trackifyDesktop.applyDesktopUpdate();
     });
     $('open-downloaded-desktop-installer').addEventListener('click', async () => {
         await window.trackifyDesktop.openDownloadedDesktopInstaller();

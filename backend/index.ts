@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import fs from 'fs';
 import { db, initDb } from '../database/index';
 import { formatTemplate, sendTelegramMessage } from '../notifications/telegram';
 import { getUserTelegramConfig } from '../notifications/index';
@@ -18,6 +19,60 @@ app.use(express.json());
 initDb();
 
 startRemoteControl();
+
+const LOCAL_APP_AUTH_FILE = String(process.env.TRACKIFY_LOCAL_APP_AUTH_FILE || '').trim();
+const LOCAL_APP_SESSION_SECRET = String(process.env.TRACKIFY_LOCAL_APP_SESSION_SECRET || '').trim();
+
+function getLocalDesktopSession() {
+    if (!LOCAL_APP_AUTH_FILE || !LOCAL_APP_SESSION_SECRET) {
+        return { ok: false, error: 'LOCAL_APP_REQUIRED' };
+    }
+
+    if (!fs.existsSync(LOCAL_APP_AUTH_FILE)) {
+        return { ok: false, error: 'LOCAL_APP_REQUIRED' };
+    }
+
+    try {
+        const raw = fs.readFileSync(LOCAL_APP_AUTH_FILE, 'utf8');
+        const parsed = JSON.parse(raw);
+        const signature = String(parsed.signature || '').trim();
+        const payload = {
+            device_id: parsed.device_id || null,
+            device_name: parsed.device_name || null,
+            status: parsed.status || 'unknown',
+            blocked: Boolean(parsed.blocked),
+            checked_at: parsed.checked_at || null,
+            issued_at: parsed.issued_at || null,
+            expires_at: parsed.expires_at || null
+        };
+
+        const expected = crypto.createHmac('sha256', LOCAL_APP_SESSION_SECRET)
+            .update(JSON.stringify(payload))
+            .digest('hex');
+        if (!signature || signature !== expected) {
+            return { ok: false, error: 'LOCAL_APP_REQUIRED' };
+        }
+
+        const expiresAt = payload.expires_at ? new Date(payload.expires_at) : null;
+        if (!expiresAt || Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() <= Date.now()) {
+            return { ok: false, error: 'LOCAL_APP_REQUIRED' };
+        }
+
+        if (payload.blocked || payload.status !== 'active') {
+            return {
+                ok: false,
+                error: 'DEVICE_BLOCKED',
+                blocked: true,
+                status: payload.status,
+                reason: 'Bu cihaz registry tarafından pasif durumda.'
+            };
+        }
+
+        return { ok: true, payload };
+    } catch {
+        return { ok: false, error: 'LOCAL_APP_REQUIRED' };
+    }
+}
 
 async function notifyUserTelegram(message: string) {
     const { token, chatId, enabled } = getUserTelegramConfig();
@@ -149,6 +204,18 @@ function upsertDevice(payload: Record<string, any>) {
 }
 
 app.use('/api', (req, res, next) => {
+    const localDesktopSession = getLocalDesktopSession();
+    if (!localDesktopSession.ok) {
+        const isBlocked = localDesktopSession.error === 'DEVICE_BLOCKED';
+        return res.status(403).json({
+            error: localDesktopSession.error,
+            blocked: isBlocked,
+            reason: isBlocked
+                ? (localDesktopSession.reason || 'Bu cihaz registry tarafından pasif durumda.')
+                : 'Trackify masaüstü uygulaması açık değil veya bu backend oturumu artık geçerli değil.'
+        });
+    }
+
     if (req.path === '/device/bootstrap' || req.path === '/device/status') {
         return next();
     }
@@ -700,14 +767,25 @@ app.post('/api/settings', (req, res) => {
 
 app.post('/api/device/bootstrap', (req, res) => {
     try {
-        const { device, access } = upsertDevice(req.body || {});
+        const localDesktopSession = getLocalDesktopSession();
+        if (!localDesktopSession.ok) {
+            return res.status(403).json({
+                error: localDesktopSession.error,
+                blocked: localDesktopSession.error === 'DEVICE_BLOCKED',
+                reason: localDesktopSession.error === 'DEVICE_BLOCKED'
+                    ? (localDesktopSession.reason || 'Bu cihaz registry tarafından pasif durumda.')
+                    : 'Trackify masaüstü uygulaması açık değil veya lisans oturumu geçerli değil.'
+            });
+        }
+        const payload = localDesktopSession.payload!;
         res.json({
             success: true,
-            device_id: device.device_id,
-            status: access.status,
-            blocked: access.isBlocked,
-            blocked_until: access.blocked_until,
-            reason: access.reason
+            device_id: payload.device_id,
+            device_name: payload.device_name,
+            status: payload.status,
+            blocked: false,
+            blocked_until: null,
+            reason: null
         });
     } catch (err: any) {
         res.status(400).json({ error: err.message });
@@ -716,21 +794,25 @@ app.post('/api/device/bootstrap', (req, res) => {
 
 app.get('/api/device/status', (req, res) => {
     try {
-        const deviceId = getDeviceIdFromRequest(req) || String(req.query.device_id || '').trim();
-        if (!deviceId) return res.status(400).json({ error: 'device_id is required' });
-
-        const device: any = db.prepare('SELECT * FROM devices WHERE device_id = ?').get(deviceId);
-        if (!device) return res.json({ success: true, status: 'active', blocked: false });
-
-        const access = getEffectiveDeviceAccess(device);
-        db.prepare('UPDATE devices SET last_seen_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(device.id);
+        const localDesktopSession = getLocalDesktopSession();
+        if (!localDesktopSession.ok) {
+            return res.status(403).json({
+                error: localDesktopSession.error,
+                blocked: localDesktopSession.error === 'DEVICE_BLOCKED',
+                reason: localDesktopSession.error === 'DEVICE_BLOCKED'
+                    ? (localDesktopSession.reason || 'Bu cihaz registry tarafından pasif durumda.')
+                    : 'Trackify masaüstü uygulaması açık değil veya lisans oturumu geçerli değil.'
+            });
+        }
+        const payload = localDesktopSession.payload!;
         res.json({
             success: true,
-            device_id: device.device_id,
-            status: access.status,
-            blocked: access.isBlocked,
-            blocked_until: access.blocked_until,
-            reason: access.reason
+            device_id: payload.device_id,
+            device_name: payload.device_name,
+            status: payload.status,
+            blocked: false,
+            blocked_until: null,
+            reason: null
         });
     } catch (err: any) {
         res.status(500).json({ error: err.message });

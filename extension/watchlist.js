@@ -1,8 +1,10 @@
 const API = 'http://localhost:3001/api';
+const PRODUCTS_REVISION_KEY = 'trackify_products_revision';
 let products = [];
 let filterState = { tag: 'all', search: '', domainTag: null };
 let selectedIds = new Set();
 let countdownTimer = null;
+let reloadProductsTimer = null;
 
 const nativeFetch = window.fetch.bind(window);
 window.fetch = async (input, init = {}) => {
@@ -80,9 +82,24 @@ async function enforceAccessState() {
 }
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== 'local' || !changes.trackify_access_state?.newValue?.blocked) return;
-    renderBlockedOverlay(changes.trackify_access_state.newValue);
+    if (areaName !== 'local') return;
+
+    if (changes.trackify_access_state?.newValue?.blocked) {
+        renderBlockedOverlay(changes.trackify_access_state.newValue);
+    }
+
+    if (changes[PRODUCTS_REVISION_KEY]?.newValue) {
+        scheduleProductsReload();
+    }
 });
+
+function scheduleProductsReload() {
+    if (reloadProductsTimer) clearTimeout(reloadProductsTimer);
+    reloadProductsTimer = setTimeout(async () => {
+        reloadProductsTimer = null;
+        await loadProducts();
+    }, 250);
+}
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 function escHTML(str) {
