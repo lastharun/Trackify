@@ -5,6 +5,7 @@ let filterState = { tag: 'all', search: '', domainTag: null };
 let selectedIds = new Set();
 let countdownTimer = null;
 let reloadProductsTimer = null;
+let pendingProductsRefreshTimer = null;
 
 const nativeFetch = window.fetch.bind(window);
 window.fetch = async (input, init = {}) => {
@@ -63,6 +64,10 @@ function renderBlockedOverlay(state) {
     document.body.appendChild(overlay);
 }
 
+function removeBlockedOverlay() {
+    document.getElementById('trackify-blocked-overlay')?.remove();
+}
+
 async function enforceAccessState() {
     const state = await new Promise((resolve) => {
         try {
@@ -78,14 +83,16 @@ async function enforceAccessState() {
         }
     });
     if (state?.blocked) renderBlockedOverlay(state);
+    else removeBlockedOverlay();
     return state;
 }
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'local') return;
 
-    if (changes.trackify_access_state?.newValue?.blocked) {
-        renderBlockedOverlay(changes.trackify_access_state.newValue);
+    if (changes.trackify_access_state?.newValue) {
+        if (changes.trackify_access_state.newValue.blocked) renderBlockedOverlay(changes.trackify_access_state.newValue);
+        else removeBlockedOverlay();
     }
 
     if (changes[PRODUCTS_REVISION_KEY]?.newValue) {
@@ -99,6 +106,28 @@ function scheduleProductsReload() {
         reloadProductsTimer = null;
         await loadProducts();
     }, 250);
+}
+
+function schedulePendingProductsRefresh() {
+    if (pendingProductsRefreshTimer) {
+        clearTimeout(pendingProductsRefreshTimer);
+        pendingProductsRefreshTimer = null;
+    }
+
+    const hasPendingTrackedProducts = products.some((product) => {
+        if (!Number(product?.is_active || 0)) return false;
+        const hasTrackedSelectors = getTrackedSelectors(product).length > 0;
+        if (!hasTrackedSelectors) return false;
+        const value = String(product?.current_value || product?.last_value || '').trim();
+        return !value || /^planlanıyor$/i.test(value);
+    });
+
+    if (!hasPendingTrackedProducts) return;
+
+    pendingProductsRefreshTimer = setTimeout(async () => {
+        pendingProductsRefreshTimer = null;
+        await loadProducts();
+    }, 3000);
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -403,6 +432,7 @@ async function loadProducts() {
         document.getElementById('total-bulk').textContent = data.total || 0;
         refreshDomainTags();
         renderProducts();
+        schedulePendingProductsRefresh();
     } catch (e) {
         document.getElementById('product-list').innerHTML =
             `<div class="empty">${t('wl.backend_error')}</div>`;

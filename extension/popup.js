@@ -41,6 +41,10 @@ function renderBlockedOverlay(state) {
     document.body.appendChild(overlay);
 }
 
+function removeBlockedOverlay() {
+    document.getElementById('trackify-blocked-overlay')?.remove();
+}
+
 async function enforceAccessState() {
     const state = await new Promise((resolve) => {
         try {
@@ -56,12 +60,14 @@ async function enforceAccessState() {
         }
     });
     if (state?.blocked) renderBlockedOverlay(state);
+    else removeBlockedOverlay();
     return state;
 }
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== 'local' || !changes.trackify_access_state?.newValue?.blocked) return;
-    renderBlockedOverlay(changes.trackify_access_state.newValue);
+    if (areaName !== 'local' || !changes.trackify_access_state?.newValue) return;
+    if (changes.trackify_access_state.newValue.blocked) renderBlockedOverlay(changes.trackify_access_state.newValue);
+    else removeBlockedOverlay();
 });
 
 function inferValueType(value, fallback = 'string') {
