@@ -161,6 +161,75 @@ function getLocalAppAuthFile() {
     return path.join(getRuntimeDataDir(), 'local-app-auth.json');
 }
 
+function getServicePidFile(kind) {
+    return path.join(getRuntimeDataDir(), `${kind}.pid`);
+}
+
+function readServicePid(kind) {
+    try {
+        const raw = fs.readFileSync(getServicePidFile(kind), 'utf8').trim();
+        const pid = Number(raw);
+        return Number.isInteger(pid) && pid > 0 ? pid : null;
+    } catch {
+        return null;
+    }
+}
+
+function writeServicePid(kind, pid) {
+    try {
+        fs.writeFileSync(getServicePidFile(kind), String(pid));
+    } catch { }
+}
+
+function clearServicePid(kind) {
+    try {
+        fs.rmSync(getServicePidFile(kind), { force: true });
+    } catch { }
+}
+
+function isPidRunning(pid) {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function terminatePid(pid, label) {
+    if (!pid || pid === process.pid) return;
+    if (!isPidRunning(pid)) return;
+
+    try {
+        process.kill(pid, 'SIGTERM');
+    } catch { }
+
+    const deadline = Date.now() + 4000;
+    while (Date.now() < deadline) {
+        if (!isPidRunning(pid)) return;
+        await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+
+    try {
+        process.kill(pid, 'SIGKILL');
+    } catch { }
+
+    pushLog('desktop', `Eski ${label} süreci sonlandırıldı (pid=${pid}).`);
+}
+
+async function cleanupStaleManagedProcesses() {
+    clearLocalAppAuthFile();
+
+    const backendPid = readServicePid('backend');
+    const workerPid = readServicePid('worker');
+
+    await terminatePid(backendPid, 'backend');
+    await terminatePid(workerPid, 'worker');
+
+    clearServicePid('backend');
+    clearServicePid('worker');
+}
+
 function clearLocalAppAuthFile() {
     try {
         fs.rmSync(getLocalAppAuthFile(), { force: true });
@@ -728,9 +797,13 @@ function getProcessDescriptor(kind) {
 }
 
 function attachProcessLogs(child, source) {
+    const kind = source === 'backend' ? 'backend' : source === 'worker' ? 'worker' : null;
+    if (kind && child?.pid) writeServicePid(kind, child.pid);
+
     child.stdout?.on('data', (chunk) => pushLog(source, chunk.toString()));
     child.stderr?.on('data', (chunk) => pushLog(source, chunk.toString()));
     child.on('exit', (code, signal) => {
+        if (kind && readServicePid(kind) === child.pid) clearServicePid(kind);
         child.exitCode = code;
         child.lastError = signal ? `signal:${signal}` : null;
         pushLog(source, `Süreç kapandı code=${code ?? 'null'} signal=${signal ?? 'none'}`);
@@ -797,9 +870,12 @@ async function startWorkerProcess() {
 
 async function stopManagedServices() {
     clearLocalAppAuthFile();
-    for (const proc of [workerProcess, backendProcess]) {
+    for (const [kind, proc] of [['worker', workerProcess], ['backend', backendProcess]]) {
         if (!proc || proc.killed) continue;
-        proc.kill('SIGTERM');
+        try {
+            proc.kill('SIGTERM');
+        } catch { }
+        clearServicePid(kind);
     }
 }
 
@@ -900,6 +976,7 @@ app.whenReady().then(async () => {
     createWindow();
     createTray();
     ensureDesktopDevice();
+    await cleanupStaleManagedProcesses();
     await refreshRegistryAccess('register').catch(() => { });
     refreshLocalAppAuthFile();
     checkExtensionUpdate().catch(() => { });
