@@ -140,26 +140,10 @@ function ensureLicenseBinding(deviceId: string, providedLicenseKey: string | nul
         };
     }
 
-    if (!license.bound_device_id) {
-        registryDb.prepare(`
-            UPDATE licenses
-            SET bound_device_id = ?,
-                last_activated_at = CURRENT_TIMESTAMP,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE license_key = ?
-        `).run(deviceId, normalizedKey);
-    } else {
-        registryDb.prepare(`
-            UPDATE licenses
-            SET last_activated_at = CURRENT_TIMESTAMP,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE license_key = ?
-        `).run(normalizedKey);
-    }
-
     return {
         ok: true,
-        license: getLicense(normalizedKey)
+        license,
+        shouldBindDevice: !license.bound_device_id
     };
 }
 
@@ -272,6 +256,23 @@ function upsertDevice(input: any, req?: express.Request) {
         device.meta_json,
         license.expires_at || null
     );
+
+    if (licenseBinding.shouldBindDevice) {
+        registryDb.prepare(`
+            UPDATE licenses
+            SET bound_device_id = ?,
+                last_activated_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE license_key = ?
+        `).run(device.device_id, license.license_key);
+    } else {
+        registryDb.prepare(`
+            UPDATE licenses
+            SET last_activated_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE license_key = ?
+        `).run(license.license_key);
+    }
 
     logDeviceEvent(device.device_id, isNew ? 'register' : 'heartbeat', {
         license_key: license.license_key,

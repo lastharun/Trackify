@@ -344,7 +344,18 @@ function ensureDesktopDevice() {
 
 async function fetchJson(url, init) {
     const res = await fetch(url, init);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+        let detail = '';
+        try {
+            const data = await res.json();
+            detail = data?.reason || data?.error || '';
+        } catch {
+            try {
+                detail = await res.text();
+            } catch { }
+        }
+        throw new Error(detail ? `HTTP ${res.status}: ${detail}` : `HTTP ${res.status}`);
+    }
     return res.json();
 }
 
@@ -416,7 +427,9 @@ async function refreshRegistryAccess(mode = 'heartbeat') {
     } catch (error) {
         desktopAccessState = {
             ...desktopAccessState,
-            status: desktopAccessState?.status || 'unknown',
+            status: 'registry_error',
+            blocked: true,
+            reason: error.message,
             checked_at: new Date().toISOString(),
             error: error.message
         };
